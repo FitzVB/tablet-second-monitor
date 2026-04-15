@@ -81,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
 
     let stream_route = warp::path("stream")
         .and(warp::ws())
-        .and(stream_query_filter.clone())
+        .and(stream_query_filter)
         .and(stream_cfg_filter)
         .map(|ws: warp::ws::Ws, query: StreamQuery, cfg: StreamConfig| {
             ws.on_upgrade(move |socket| handle_stream(socket, cfg, query))
@@ -456,13 +456,15 @@ async fn handle_h264_stream(socket: warp::ws::WebSocket, query: StreamQuery) {
         match stream_with_ffmpeg(
             &mut ws_tx,
             &running,
-            out_w,
-            out_h,
-            fps,
-            bitrate,
-            display_idx,
-            encoder,
-            *capture,
+            FfmpegConfig {
+                out_w,
+                out_h,
+                fps,
+                bitrate_kbps: bitrate,
+                display_idx,
+                encoder: encoder.to_string(),
+                capture: *capture,
+            },
         )
         .await
         {
@@ -491,21 +493,25 @@ async fn handle_h264_stream(socket: warp::ws::WebSocket, query: StreamQuery) {
     info!("h264 stream client disconnected");
 }
 
-async fn stream_with_ffmpeg(
-    ws_tx: &mut futures::stream::SplitSink<warp::ws::WebSocket, Message>,
-    running: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+struct FfmpegConfig {
     out_w: u32,
     out_h: u32,
     fps: u32,
     bitrate_kbps: u32,
     display_idx: u32,
-    encoder: &str,
+    encoder: String,
     capture: Capture,
+}
+
+async fn stream_with_ffmpeg(
+    ws_tx: &mut futures::stream::SplitSink<warp::ws::WebSocket, Message>,
+    running: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+    config: FfmpegConfig,
 ) -> anyhow::Result<bool> {
     let mut args: Vec<String> = Vec::new();
 
     // --- Input source ---
-    match capture {
+    match config.capture {
         Capture::Ddagrab => {
             // DXGI Desktop Duplication: captures directly from GPU framebuffer.
             // hwdownload copies from GPU VRAM → CPU RAM; format=bgra gives explicit pixel fmt.
@@ -514,8 +520,8 @@ async fn stream_with_ffmpeg(
                 "lavfi".into(),
                 "-i".into(),
                 format!(
-                    "ddagrab={}:framerate={fps},hwdownload,format=bgra",
-                    display_idx
+                    "ddagrab={}:framerate={},hwdownload,format=bgra",
+                    config.display_idx, config.fps
                 ),
             ]);
         }
@@ -529,7 +535,7 @@ async fn stream_with_ffmpeg(
                 "-f".into(),
                 "gdigrab".into(),
                 "-framerate".into(),
-                fps.to_string(),
+                config.fps.to_string(),
                 "-i".into(),
                 "desktop".into(),
             ]);
@@ -558,30 +564,31 @@ async fn stream_with_ffmpeg(
     // timestamps via the cfr muxer without any per-frame buffering in the filtergraph.
     // format=yuv420p: convert bgr0 (gdigrab) and bgra (ddagrab) to planar YUV.
     let vf = format!(
-        "scale={out_w}:{out_h}:force_original_aspect_ratio=increase,crop={out_w}:{out_h},format=yuv420p"
+        "scale={}:{}:force_original_aspect_ratio=increase,crop={}:{},format=yuv420p",
+        config.out_w, config.out_h, config.out_w, config.out_h
     );
     args.extend(["-vf".into(), vf, "-an".into()]);
 
     // Force exactly fps output frames/sec via muxer timestamp assignment (no FIFO).
-    args.extend(["-r".into(), fps.to_string()]);
+    args.extend(["-r".into(), config.fps.to_string()]);
 
     // --- Encoder + encoder-specific low-latency flags ---
-    args.extend(["-c:v".into(), encoder.into()]);
-    args.extend(encoder_extra_args(encoder));
+    args.extend(["-c:v".into(), config.encoder.clone()]);
+    args.extend(encoder_extra_args(&config.encoder));
 
     // --- Bitrate / GOP ---
     // g = fps/2: keyframe every 0.5s — faster recovery and lower decode latency than 1s.
     // bufsize = bitrate/4 (250ms VBV): balances encode latency vs quality on scene changes.
     // bitrate/8 (125ms) caused visible artifacts by starving the encoder on fast-moving scenes.
-    let bufsize = bitrate_kbps / 4;
-    let gop = fps / 2;
+    let bufsize = config.bitrate_kbps / 4;
+    let gop = config.fps / 2;
     args.extend([
         "-g".into(),
         gop.to_string(),
         "-b:v".into(),
-        format!("{}k", bitrate_kbps),
+        format!("{}k", config.bitrate_kbps),
         "-maxrate".into(),
-        format!("{}k", bitrate_kbps),
+        format!("{}k", config.bitrate_kbps),
         "-bufsize".into(),
         format!("{}k", bufsize),
         // dump_extra: Repeat the SPS+PPS parameter sets before every IDR frame.
@@ -628,7 +635,7 @@ async fn stream_with_ffmpeg(
             break; // ffmpeg exited (encoder unavailable or finished)
         }
         if !sent_any {
-            info!(encoder, "first H.264 bytes sent to client ({n} bytes)");
+            info!(encoder = %config.encoder, "first H.264 bytes sent to client ({n} bytes)");
         }
         sent_any = true;
         if ws_tx
