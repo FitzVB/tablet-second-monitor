@@ -24,3 +24,8 @@ captures/
 # Environment
 .env
 .env.local
+
+# Distribution build artifacts
+dist/
+.cache/
+*.zip

@@ -1,0 +1,183 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Rust toolchain
+      # -----------------------------------------------------------------------
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: host-windows
+
+      # -----------------------------------------------------------------------
+      # 3. Build Rust host binary
+      # -----------------------------------------------------------------------
+      - name: Build host-windows (release)
+        working-directory: host-windows
+        run: cargo build --release
+
+      # -----------------------------------------------------------------------
+      # 4. Set up Java for Android build
+      # -----------------------------------------------------------------------
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # -----------------------------------------------------------------------
+      # 5. Build Android APK (debug — no signing key required)
+      # -----------------------------------------------------------------------
+      - name: Build Android APK (debug)
+        working-directory: android-client
+        run: .\gradlew.bat assembleDebug --no-daemon
+        continue-on-error: true   # Don't fail the whole release if Gradle fails
+
+      - name: Locate APK
+        id: find_apk
+        shell: pwsh
+        run: |
+          $apk = Get-ChildItem android-client\app\build\outputs\apk\debug\*.apk -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($apk) {
+            Write-Host "APK found: $($apk.FullName)"
+            echo "apk_path=$($apk.FullName)" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No APK found, continuing without it."
+            echo "apk_path=" >> $env:GITHUB_OUTPUT
+          }
+
+      # -----------------------------------------------------------------------
+      # 6. Download FFmpeg static build (BtbN GPL)
+      # -----------------------------------------------------------------------
+      - name: Download FFmpeg
+        shell: pwsh
+        run: |
+          $ProgressPreference = "SilentlyContinue"
+          $url  = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+          $zip  = "$env:TEMP\ffmpeg.zip"
+          Invoke-WebRequest $url -OutFile $zip -UseBasicParsing
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          foreach ($entry in $archive.Entries) {
+            if ($entry.FullName -match "/bin/ffmpeg\.exe$") {
+              [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, "ffmpeg.exe", $true)
+            }
+          }
+          $archive.Dispose()
+
+      # -----------------------------------------------------------------------
+      # 7. Download ADB platform-tools
+      # -----------------------------------------------------------------------
+      - name: Download ADB
+        shell: pwsh
+        run: |
+          $ProgressPreference = "SilentlyContinue"
+          $url  = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+          $zip  = "$env:TEMP\platform-tools.zip"
+          Invoke-WebRequest $url -OutFile $zip -UseBasicParsing
+          $needed  = @("adb.exe","AdbWinApi.dll","AdbWinUsbApi.dll")
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          foreach ($entry in $archive.Entries) {
+            $leaf = [System.IO.Path]::GetFileName($entry.FullName)
+            if ($needed -contains $leaf) {
+              [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $leaf, $true)
+            }
+          }
+          $archive.Dispose()
+
+      # -----------------------------------------------------------------------
+      # 8. Assemble distribution package
+      # -----------------------------------------------------------------------
+      - name: Assemble distribution
+        id: assemble
+        shell: pwsh
+        run: |
+          $version   = "${{ github.ref_name }}" -replace "^v",""
+          $distName  = "TabletMonitor-v$version-windows"
+          $distDir   = "dist\$distName"
+
+          New-Item -ItemType Directory -Force $distDir | Out-Null
+
+          # Host binary
+          Copy-Item "host-windows\target\release\host-windows.exe" "$distDir\host-windows.exe"
+
+          # FFmpeg
+          Copy-Item "ffmpeg.exe" "$distDir\ffmpeg.exe"
+
+          # ADB
+          @("adb.exe","AdbWinApi.dll","AdbWinUsbApi.dll") | ForEach-Object {
+            if (Test-Path $_) { Copy-Item $_ "$distDir\$_" }
+          }
+
+          # APK
+          $apkPath = "${{ steps.find_apk.outputs.apk_path }}"
+          if ($apkPath -and (Test-Path $apkPath)) {
+            Copy-Item $apkPath "$distDir\TabletMonitor.apk"
+          }
+
+          # Launchers
+          Copy-Item "START.bat" "$distDir\START.bat"
+          Copy-Item "STOP.bat"  "$distDir\STOP.bat"
+
+          # Guide
+          Copy-Item "GUIDE.txt" "$distDir\GUIDE.txt" -ErrorAction SilentlyContinue
+
+          # ZIP
+          $zipPath = "dist\$distName.zip"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory($distDir, $zipPath)
+
+          $sizeMB = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
+          Write-Host "ZIP ready: $zipPath ($sizeMB MB)"
+
+          echo "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
+          echo "dist_name=$distName" >> $env:GITHUB_OUTPUT
+
+      # -----------------------------------------------------------------------
+      # 9. Create GitHub Release and upload ZIP
+      # -----------------------------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Tablet Monitor ${{ github.ref_name }}"
+          body: |
+            ## Tablet Monitor ${{ github.ref_name }}
+
+            ### Instalacion rapida
+            1. Descarga `${{ steps.assemble.outputs.dist_name }}.zip`
+            2. Extrae la carpeta
+            3. Conecta la tablet por USB con depuracion USB activada
+            4. Haz doble clic en **START.bat**
+            5. Abre la app en la tablet y pulsa **Connect**
+
+            Consulta `GUIDE.txt` dentro del ZIP para instrucciones detalladas.
+            Ver [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) para cambios.
+          files: ${{ steps.assemble.outputs.zip_path }}
+          draft: false
+          prerelease: false

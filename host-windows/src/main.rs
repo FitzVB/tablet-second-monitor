@@ -580,7 +580,7 @@ async fn stream_with_ffmpeg(
         "-".into(),
     ]);
 
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = Command::new(ffmpeg_exe());
     cmd.args(&args)
         .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
@@ -641,4 +641,46 @@ async fn broadcast(rooms: &Rooms, room: &str, sender: &str, message: &SignalMess
             }
         }
     }
+}
+
+/// Resolve the path to `ffmpeg(.exe)`.
+///
+/// Search order:
+/// 1. Same directory as the running executable — bundled distribution places
+///    `host-windows.exe` and `ffmpeg.exe` side-by-side.
+/// 2. A `bin/` subdirectory next to the executable.
+/// 3. Fall back to the name `ffmpeg` and let the OS search PATH.
+fn ffmpeg_exe() -> std::path::PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        let name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+        let sibling = exe.with_file_name(name);
+        if sibling.exists() {
+            return sibling;
+        }
+        if let Some(dir) = exe.parent() {
+            let in_bin = dir.join("bin").join(name);
+            if in_bin.exists() {
+                return in_bin;
+            }
+        }
+    }
+    std::path::PathBuf::from(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" })
+}
+
+/// Same bundled-first resolution for `adb(.exe)`.
+pub fn adb_exe() -> std::path::PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        let name = if cfg!(windows) { "adb.exe" } else { "adb" };
+        let sibling = exe.with_file_name(name);
+        if sibling.exists() {
+            return sibling;
+        }
+        if let Some(dir) = exe.parent() {
+            let in_bin = dir.join("bin").join(name);
+            if in_bin.exists() {
+                return in_bin;
+            }
+        }
+    }
+    std::path::PathBuf::from(if cfg!(windows) { "adb.exe" } else { "adb" })
 }
