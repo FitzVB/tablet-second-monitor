@@ -1,47 +1,246 @@
 # Tablet Second Monitor (Windows + Android) - USB First
 
-MVP base para convertir una tablet Android en pantalla remota de Windows con foco en baja latencia por USB.
+Convierte una tablet Android en pantalla remota de baja latencia para Windows usando conexión USB y codec H.264 hardware.
 
-## Que cambia en este enfoque
+## 🚀 Quick Start
 
-- Conexion por USB con ADB reverse.
-- Sin IP local, sin abrir puertos en firewall, sin configurar red Wi-Fi.
-- La app Android siempre conecta a `ws://127.0.0.1:9001/ws`.
+**Para instalación y configuración completa, ver [SETUP.md](SETUP.md)**
 
-## Estructura
+```powershell
+# Verificar dependencias
+.\setup.ps1 -Verify
 
-- `host-windows/`: host en Rust.
-- `android-client/`: app Android (Kotlin).
-- `scripts/start-usb.ps1`: inicia host + tunel USB.
-- `scripts/stop-usb.ps1`: cierra tunel USB.
-- `start-usb.bat`: atajo para usuarios finales.
+# Instalar requisitos faltantes
+.\setup.ps1 -Install
 
-## Requisitos
+# Compilar y ejecutar
+cd host-windows
+cargo run
+```
+
+## 📋 Requisitos del Sistema
 
 ### PC Windows
-- Rust estable (cargo/rustc)
-- Android SDK Platform-Tools (adb)
+- **OS**: Windows 10/11 (x64)
+- **Rust**: 1.70.0+ (Descargar: https://rustup.rs)
+- **ADB**: Para comunicación USB (Descargar: https://developer.android.com/tools/releases/platform-tools)
+- **Java**: JDK 11+ para compilar Android (Descargar: https://adoptium.net)
+- **FFmpeg**: Para codificación H.264 (Descargar: https://ffmpeg.org)
+- **Espacio**: ~2GB en disco
 
 ### Tablet Android
-- Depuracion USB habilitada
-- Cable USB de datos
+- **Version**: Android 7.0+ (API 24+)
+- **Cable**: USB datos (no solo carga)
+- **Configuración**: USB Debugging habilitado
 
-## Uso para cualquier persona (flujo recomendado)
+**→ [Todas las instrucciones de instalación en SETUP.md](SETUP.md)**
 
-1. Conecta la tablet por USB.
-2. Activa depuracion USB y acepta la clave RSA en la tablet.
-3. En la raiz del proyecto ejecuta `start-usb.bat`.
-4. Abre la app en Android y pulsa `Conectar`.
+## 🏗 Estructura del Proyecto
 
-Para detener la sesion USB:
-- Ejecuta `stop-usb.bat`.
+- `host-windows/`: Servidor WebSocket + FFmpeg en Rust
+- `android-client/`: App Android nativa en Kotlin
+- `setup.ps1`: Script automatizado de instalación
+- `requirements.json`: Configuración legible para IA
+- `SETUP.md`: Guía completa de instalación
+- `scripts/`: Scripts de inicio/parada USB
 
-## Flujo tecnico
+## ✨ Características
 
-1. `adb reverse tcp:9001 tcp:9001` crea un tunel desde la tablet al host.
-2. El host escucha en `127.0.0.1:9001`.
-3. La app Android se conecta a `ws://127.0.0.1:9001/ws`.
+### Codec de Video
+- **H.264** hardware-acelerado
+- Fallback automático: NVENC → QSV → AMF → libx264
+- **60 FPS** objetivo, mínimo 30 FPS
 
-## Estado actual
+### Transporte
+- **USB** con ADB reverse tunnel
+- WebSocket binary frames
+- Zero firewall configuration
+- Latencia ultra-baja < 100ms
 
-Este scaffold deja resuelto el transporte USB y la senalizacion. El streaming de escritorio (DXGI + track de video) se implementa en la siguiente iteracion.
+### Interfaz Android
+- **SurfaceView** nativo para máximo rendimiento
+- Landscape fullscreen immersive
+- Logs en tiempo real
+- Control conexión desde botones
+
+## 🔧 ¿Por qué este enfoque?
+
+| Aspecto | USB+ADB | WiFi Directo | VPN |
+|--------|---------|-------------|-----|
+| Latencia | Ultra-baja | Media | Variable |
+| Firewall | No necesita | Abierto | Abierto |
+| Configuración | Automática | Manual | Compleja |
+| Costo de energía | Bajo | Alto | Medio |
+| Estabilidad | Muy estable | Intermitente | Estable |
+
+## 📱 Workflow de Uso
+
+```powershell
+# 1. Conectar tablet por USB
+# 2. Habilitar USB Debugging en tablet (Settings → Developer Options)
+
+# 3. Compilar (solo primera vez)
+cd host-windows && cargo build
+cd ../android-client && .\gradlew assembleDebug
+
+# 4. Instalar APK
+adb install -r android-client\app\build\outputs\apk\debug\app-debug.apk
+
+# 5. Iniciar servidor
+cd host-windows
+$env:TABLET_MONITOR_LISTEN = "127.0.0.1"
+cargo run
+
+# 6. En la tablet:
+# - Abrir app "Tablet Monitor"
+# - Pulsar "Conectar"
+# - Video aparece en pantalla completa
+```
+
+## 🎯 Flujo Técnico
+
+1. **Iniciación USB**: `adb reverse tcp:9001 tcp:9001` (host → tablet en puerto virtual)
+2. **Server**: Host escucha en `127.0.0.1:9001` (desde perspectiva de tablet)
+3. **Conexión**: Android abre WebSocket a `ws://127.0.0.1:9001/h264`
+4. **Captura**: FFmpeg captura pantalla de Windows con `gdigrab`
+5. **Codificación**: FFmpeg codifica a H.264 en hardware (GPU)
+6. **Transmisión**: Raw H.264 Annex-B NAL units sobre WebSocket
+7. **Decodificación**: MediaCodec hardware en Android decodifica
+8. **Renderizado**: SurfaceView muestra video sin latencia
+
+## 🚀 Instalación Rápida
+
+**Opción A: Automatizado (Recomendado)**
+```powershell
+.\setup.ps1 -Full
+```
+
+**Opción B: Manual**
+```powershell
+# Instalar Rust
+Invoke-WebRequest -Uri https://rustup.rs | Invoke-Expression
+
+# Instalar Java y ADB
+winget install OpenJDK.17
+winget install Google.AndroidStudio.Tools
+winget install FFmpeg
+
+# Verificar
+rustc --version
+adb version
+java -version
+ffmpeg -version
+```
+
+Ver [SETUP.md](SETUP.md) para instrucciones detalladas.
+
+## 📊 Estado del Proyecto
+
+| Componente | Estado | Notas |
+|-----------|---------|-------|
+| Captura de pantalla | ✅ | GDI con soporte DXGI plannned |
+| Codec H.264 | ✅ | Hardware + fallback software |
+| Media Codec Android| ✅ | Con parser Annex-B |
+| Transporte USB | ✅ | ADB reverse tunnel |
+| Señalización | ✅ | WebSocket room-based |
+| Fullscreen Android | ✅ | Landscape immersive mode |
+| Latencia optimización | ✅ | Tuning de bitrate/FPS |
+| Interfaz UI | ✅ | Logs + control de conexión |
+
+## 🔍 Debugging & Logs
+
+```powershell
+# Ver logs del servidor
+cd host-windows && cargo run
+
+# Ver logs de Android
+adb logcat -s "TabletMonitor|H264|MediaCodec"
+
+# Verificar conexión WiFi inverse
+adb reverse -l
+
+# Reestablecer túnel
+adb reverse tcp:9001 tcp:9001
+```
+
+## ⚙️ Tuning de Rendimiento
+
+### Reducir latencia
+```powershell
+$env:TABLET_MONITOR_FPS = "30"           # Menor FPS = menor latencia
+$env:TABLET_MONITOR_BITRATE = "2000"     # Bitrate más bajo
+```
+
+### Mejor calidad
+```powershell
+$env:TABLET_MONITOR_FPS = "60"
+$env:TABLET_MONITOR_BITRATE = "5000"
+```
+
+### GPU específica
+```powershell
+$env:TABLET_MONITOR_HW_ENCODER = "h264_nvenc"  # NVIDIA
+$env:TABLET_MONITOR_HW_ENCODER = "h264_qsv"   # Intel
+$env:TABLET_MONITOR_HW_ENCODER = "h264_amf"   # AMD
+```
+
+## 🐛 Troubleshooting
+
+| Problema | Solución |
+|----------|----------|
+| ADB device not found | `adb connect <ip>` o reconectar USB |
+| FFmpeg not found | `winget install FFmpeg` y agregar PATH |
+| Android app crashes | `adb logcat` para ver detalles |
+| Latencia alta | Reducir bitrate o FPS |
+| Sin video | Verificar `adb reverse -l` y puertos |
+
+Ver [SETUP.md - Troubleshooting](SETUP.md#troubleshooting) para soluciones completas.
+
+## 🔗 Endpoints WebSocket
+
+```
+/stream   → JPEG streaming (legacy, bajo rendimiento)
+/h264    → H.264 video (recomendado, hardware codec)
+/ws      → Señalización WebSocket
+```
+
+Ejemplo:
+```
+ws://127.0.0.1:9001/h264?w=960&h=540&fps=60&bitrate_kbps=3500&fit=cover
+```
+
+## 📦 Automatización e IA
+
+Para integración con herramientas de IA/CI-CD:
+
+- **requirements.json**: Definición parseable de dependencias
+- **setup.ps1**: Script de instalación automatizado
+- **SETUP.md**: Instrucciones legibles para máquinas
+
+Ejemplo de lectura:
+```json
+{
+  "dependencies": {...},
+  "build_targets": [...],
+  "deployment": [...]
+}
+```
+
+## 📝 Licencia
+
+MIT - Usa libremente para proyectos personales y comerciales.
+
+## 🤝 Contribuciones
+
+Contributions welcome! Por favor:
+1. Fork el repo
+2. Crea branch para tu feature
+3. Commit cambios
+4. Push a branch
+5. Abre Pull Request
+
+## 📞 Soporte
+
+- GitHub Issues: Reportar bugs
+- Discussions: Preguntas y ideas
+- Ver SETUP.md para FAQ

@@ -1,0 +1,284 @@
+{
+  "project": {
+    "name": "Tablet Second Monitor",
+    "description": "USB-based tablet-to-PC streaming with H.264 hardware codec",
+    "version": "1.0.0",
+    "minPythonVersion": false,
+    "nodeVersion": null
+  },
+  "system_requirements": {
+    "windows_min_version": "10",
+    "architecture": "x64",
+    "disk_space_gb": 2,
+    "ram_gb": 4,
+    "ram_recommended_gb": 8
+  },
+  "dependencies": {
+    "rust": {
+      "category": "required",
+      "purpose": "Host server compilation",
+      "version_min": "1.70.0",
+      "commands": {
+        "check": "rustc --version",
+        "version_pattern": "rustc (\\d+\\.\\d+\\.\\d+)"
+      },
+      "install_methods": [
+        {
+          "method": "rustup",
+          "command": "# Visit https://rustup.rs and run installer"
+        },
+        {
+          "method": "winget",
+          "command": "winget install -e --id Rustlang.Rust.MSVC"
+        },
+        {
+          "method": "scoop",
+          "command": "scoop install rustup"
+        }
+      ]
+    },
+    "cargo": {
+      "category": "required",
+      "purpose": "Rust package manager",
+      "auto_with": "rust",
+      "commands": {
+        "check": "cargo --version"
+      }
+    },
+    "adb": {
+      "category": "required",
+      "purpose": "Android Debug Bridge - USB device communication",
+      "version_min": "1.0.30",
+      "commands": {
+        "check": "adb version",
+        "version_pattern": "Android Debug Bridge version (\\d+\\.\\d+)"
+      },
+      "install_methods": [
+        {
+          "method": "winget",
+          "command": "winget install -e --id Google.AndroidStudio.Tools"
+        },
+        {
+          "method": "direct_download",
+          "url": "https://developer.android.com/tools/releases/platform-tools",
+          "path": "$env:LOCALAPPDATA\\Android\\Sdk\\platform-tools"
+        }
+      ],
+      "env_vars": {
+        "PATH": "$env:LOCALAPPDATA\\Android\\Sdk\\platform-tools"
+      }
+    },
+    "java": {
+      "category": "required",
+      "purpose": "Android APK compilation",
+      "version_min": "11.0",
+      "commands": {
+        "check": "java -version"
+      },
+      "install_methods": [
+        {
+          "method": "winget",
+          "command": "winget install -e --id EclipseAdoptium.Temurin.17"
+        },
+        {
+          "method": "scoop",
+          "command": "scoop install openjdk17"
+        }
+      ],
+      "env_vars": {
+        "JAVA_HOME": "C:\\Program Files\\OpenJDK\\jdk-17.0.6"
+      }
+    },
+    "git": {
+      "category": "required",
+      "purpose": "Version control",
+      "commands": {
+        "check": "git --version"
+      },
+      "install_methods": [
+        {
+          "method": "winget",
+          "command": "winget install -e --id Git.Git"
+        }
+      ]
+    },
+    "ffmpeg": {
+      "category": "required",
+      "purpose": "H.264 video encoding",
+      "version_min": "5.0",
+      "commands": {
+        "check": "ffmpeg -version"
+      },
+      "install_methods": [
+        {
+          "method": "winget",
+          "command": "winget install FFmpeg"
+        },
+        {
+          "method": "chocolatey",
+          "command": "choco install ffmpeg"
+        }
+      ],
+      "env_vars": {
+        "PATH_ADD": "$env:PROGRAMFILES\\FFmpeg\\bin"
+      }
+    }
+  },
+  "build_targets": [
+    {
+      "name": "Host (Rust)",
+      "directory": "host-windows",
+      "language": "Rust",
+      "build_command": "cargo build",
+      "build_release": "cargo build --release",
+      "output": "target/debug/host-windows.exe",
+      "output_release": "target/release/host-windows.exe",
+      "dependencies_file": "Cargo.toml"
+    },
+    {
+      "name": "Android Client",
+      "directory": "android-client",
+      "language": "Kotlin",
+      "build_command": ".\\gradlew assembleDebug",
+      "build_release": ".\\gradlew assembleRelease",
+      "output": "app/build/outputs/apk/debug/app-debug.apk",
+      "output_release": "app/build/outputs/apk/release/app-release.apk",
+      "dependencies_file": "build.gradle.kts"
+    }
+  ],
+  "deployment": [
+    {
+      "step": 1,
+      "name": "Setup ADB Reverse",
+      "command": "adb reverse tcp:9001 tcp:9001",
+      "prerequisites": ["adb"]
+    },
+    {
+      "step": 2,
+      "name": "Install APK",
+      "command": "adb install -r android-client\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+      "prerequisites": ["adb", "Android Client built"]
+    },
+    {
+      "step": 3,
+      "name": "Start Host Server",
+      "command": "cd host-windows && cargo run",
+      "prerequisites": ["Host built", "FFmpeg installed"]
+    },
+    {
+      "step": 4,
+      "name": "Launch Android App",
+      "command": "adb shell am start -n com.example.tabletmonitor/.MainActivity",
+      "prerequisites": ["APK installed"]
+    }
+  ],
+  "environment_variables": {
+    "optional": {
+      "TABLET_MONITOR_HW_ENCODER": {
+        "description": "GPU encoder preference",
+        "default": "auto-detect",
+        "values": ["h264_nvenc", "h264_qsv", "h264_amf", "libx264"]
+      },
+      "TABLET_MONITOR_LISTEN": {
+        "description": "Server listen address",
+        "default": "0.0.0.0",
+        "example": "127.0.0.1"
+      },
+      "TABLET_MONITOR_FPS": {
+        "description": "Target FPS",
+        "default": "60",
+        "range": "1-120"
+      },
+      "TABLET_MONITOR_BITRATE": {
+        "description": "H.264 bitrate in kbps",
+        "default": "3500",
+        "range": "500-10000"
+      }
+    }
+  },
+  "device_setup": {
+    "android_min_api": 24,
+    "android_min_version": "7.0",
+    "steps": [
+      {
+        "step": 1,
+        "action": "Enable Developer Options",
+        "instructions": "Settings → About → Tap 'Build Number' 7 times"
+      },
+      {
+        "step": 2,
+        "action": "Enable USB Debugging",
+        "instructions": "Settings → Developer Options → USB Debugging → ON"
+      },
+      {
+        "step": 3,
+        "action": "Connect USB Cable",
+        "instructions": "Use USB data cable (not charging-only)"
+      },
+      {
+        "step": 4,
+        "action": "Authorize Device",
+        "instructions": "Tablet may show prompt: tap 'Allow USB debugging'"
+      }
+    ]
+  },
+  "verification": {
+    "commands": [
+      "rustc --version",
+      "cargo --version",
+      "adb version",
+      "java -version",
+      "javac -version",
+      "git --version",
+      "ffmpeg -version",
+      "adb devices"
+    ],
+    "paths": [
+      "host-windows/Cargo.toml",
+      "android-client/build.gradle.kts",
+      "android-client/app/src/main/java/com/example/tabletmonitor/MainActivity.kt"
+    ]
+  },
+  "scripts": {
+    "setup": {
+      "name": "Full setup script",
+      "file": "setup.ps1",
+      "usage": ".\\setup.ps1 -Full"
+    },
+    "start_usb": {
+      "name": "Start USB tunnel and host",
+      "file": "start-usb.bat"
+    },
+    "stop_usb": {
+      "name": "Stop USB tunnel",
+      "file": "stop-usb.bat"
+    }
+  },
+  "troubleshooting": {
+    "adb_device_not_found": {
+      "cause": "USB connection or driver issue",
+      "solutions": [
+        "adb disconnect",
+        "adb devices",
+        "Check Device Manager for Android drivers",
+        "Reconnect USB cable"
+      ]
+    },
+    "cargo_build_fails": {
+      "cause": "Outdated Rust or missing dependencies",
+      "solutions": [
+        "rustup update stable",
+        "cargo clean",
+        "cargo build"
+      ]
+    },
+    "ffmpeg_not_found": {
+      "cause": "FFmpeg not in PATH",
+      "solutions": [
+        "winget install FFmpeg",
+        "choco install ffmpeg",
+        "Add C:\\Program Files\\FFmpeg\\bin to PATH"
+      ]
+    }
+  }
+}
