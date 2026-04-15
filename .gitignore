@@ -1,0 +1,26 @@
+# Rust
+**/target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Android/Gradle
+.gradle/
+.idea/
+*.iml
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
