@@ -1,0 +1,52 @@
+* text=auto
+
+# Rust
+*.rs text eol=lf
+Cargo.toml text eol=lf
+Cargo.lock text eol=lf
+
+# Kotlin
+*.kt text eol=lf
+*.gradle text eol=lf
+*.gradle.kts text eol=lf
+
+# Android
+*.xml text eol=lf
+AndroidManifest.xml text eol=lf
+
+# JSON & Config
+*.json text eol=lf
+*.toml text eol=lf
+.editorconfig text eol=lf
+
+# Markdown
+*.md text eol=lf
+README.md text eol=lf
+SETUP.md text eol=lf
+
+# Shell & Batch
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.class binary
+*.jar binary
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+
+# Videos
+*.mp4 binary
+*.mov binary
+*.webm binary

@@ -1,0 +1,83 @@
+version: "3.9"
+
+services:
+  tablet-monitor-host:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tablet-monitor-host
+    image: tablet-second-monitor:latest
+    ports:
+      - "9001:9001"
+    depends_on:
+      - adb-proxy  # If using ADB in container (advanced setup)
+    environment:
+      TABLET_MONITOR_LISTEN: "0.0.0.0"
+      TABLET_MONITOR_FPS: "60"
+      TABLET_MONITOR_BITRATE: "3500"
+      TABLET_MONITOR_HW_ENCODER: "libx264"  # Use software fallback in container
+    volumes:
+      - /dev/shm:/dev/shm  # For screen capture
+    devices:
+      - /dev/dri:/dev/dri  # GPU support (optional)
+    networks:
+      - tablet-monitor
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "9001"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Nginx reverse proxy for security
+  proxy:
+    image: nginx:alpine
+    container_name: tablet-monitor-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt/live/yourdomain.com:/etc/nginx/certs:ro
+    depends_on:
+      - tablet-monitor-host
+    networks:
+      - tablet-monitor
+    restart: unless-stopped
+
+  # Optional: Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: tablet-monitor-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    depends_on:
+      - tablet-monitor-host
+    networks:
+      - tablet-monitor
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+
+networks:
+  tablet-monitor:
+    driver: bridge
+
+# Usage:
+# docker-compose up -d                  # Start all services
+# docker-compose logs -f server         # View logs
+# docker-compose down                   # Stop and remove
+# docker-compose build --no-cache       # Force rebuild
