@@ -2,6 +2,10 @@
 
 Convierte una tablet Android en pantalla remota de baja latencia para Windows usando conexión USB y codec H.264 hardware.
 
+Ahora soporta dos modos de trabajo:
+- `mirror`: duplica una pantalla existente de Windows.
+- `extended`: intenta usar una pantalla no primaria, priorizando un monitor virtual si existe.
+
 ## 🚀 Quick Start
 
 **Para instalación y configuración completa, ver [SETUP.md](SETUP.md)**
@@ -43,6 +47,7 @@ cargo run
 - `requirements.json`: Configuración legible para IA
 - `SETUP.md`: Guía completa de instalación
 - `scripts/`: Scripts de inicio/parada USB
+- `scripts/install-virtual-display.ps1`: Instalación de driver virtual por `INF`
 
 ## ✨ Características
 
@@ -62,6 +67,7 @@ cargo run
 - Landscape fullscreen immersive
 - Logs en tiempo real
 - Control conexión desde botones
+- Selector de modo `mirror` / `extended`
 
 ## 🔧 ¿Por qué este enfoque?
 
@@ -93,9 +99,18 @@ cargo run
 
 # 6. En la tablet:
 # - Abrir app "Tablet Monitor"
+# - Elegir modo: `mirror` o `extended`
 # - Pulsar "Conectar"
 # - Video aparece en pantalla completa
 ```
+
+### Selección de displays
+
+- Si dejas el campo `Auto`, el host elige la pantalla principal en modo `mirror`.
+- En modo `extended`, el host intenta usar primero un display virtual, luego el primer display no primario.
+- Si quieres forzar un monitor concreto, escribe su índice en la app o usa `TABLET_MONITOR_EXTENDED_DISPLAY`.
+- Para instalar un driver virtual empaquetado como `INF`, usa `scripts/install-virtual-display.ps1`.
+- Por defecto, `scripts/install-virtual-display.ps1` intenta instalar `VirtualDrivers.Virtual-Display-Driver` via `winget`.
 
 ## 🎯 Flujo Técnico
 
@@ -184,6 +199,28 @@ $env:TABLET_MONITOR_HW_ENCODER = "h264_qsv"   # Intel
 $env:TABLET_MONITOR_HW_ENCODER = "h264_amf"   # AMD
 ```
 
+### Modo de pantalla
+```powershell
+$env:TABLET_MONITOR_MODE = "mirror"               # duplicar pantalla principal
+$env:TABLET_MONITOR_MODE = "extended"             # preferir monitor no primario / virtual
+$env:TABLET_MONITOR_EXTENDED_DISPLAY = "2"        # forzar índice para modo extended
+```
+
+### Driver virtual
+```powershell
+# Instala Virtual Display Driver desde winget
+.\scripts\install-virtual-display.ps1
+
+# O instala un INF concreto
+.\scripts\install-virtual-display.ps1 -Provider inf -InfPath .\drivers\virtual-display\MyDriver.inf
+```
+
+### Input tactil basico
+
+- La app Android ahora abre un canal `/input` ademas del stream de video.
+- Un toque se traduce a movimiento y click izquierdo sobre el display seleccionado.
+- La primera version es tactil simple, equivalente a raton absoluto; no incluye gestos multitouch ni teclado.
+
 ## 🐛 Troubleshooting
 
 | Problema | Solución |
@@ -201,12 +238,14 @@ Ver [SETUP.md - Troubleshooting](SETUP.md#troubleshooting) para soluciones compl
 ```
 /stream   → JPEG streaming (legacy, bajo rendimiento)
 /h264    → H.264 video (recomendado, hardware codec)
+/input   → Eventos tactiles / raton absoluto hacia Windows
 /ws      → Señalización WebSocket
+/displays → Lista JSON de displays detectados por Windows
 ```
 
 Ejemplo:
 ```
-ws://127.0.0.1:9001/h264?w=960&h=540&fps=60&bitrate_kbps=3500&fit=cover
+ws://127.0.0.1:9001/h264?w=960&h=540&fps=60&bitrate_kbps=3500&fit=cover&mode=extended
 ```
 
 ## 📦 Automatización e IA

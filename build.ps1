@@ -1,20 +1,23 @@
 # build.ps1 - Comprehensive build script for Tablet Monitor project
-# Handles both Rust host and Android client builds
-# Usage: .\build.ps1 -Target host|android|all -Release [-Deploy]
+# Handles Rust host, Android client, and InnoSetup installer
+# Usage: .\build.ps1 -Target host|android|installer|all -Release [-Deploy] [-SkipAndroid] [-SkipSetup]
 
 param(
-    [ValidateSet("host", "android", "all")]
+    [ValidateSet("host", "android", "installer", "all")]
     [string]$Target = "all",
     
     [switch]$Release = $false,
     [switch]$Deploy = $false,
     [switch]$Clean = $false,
-    [switch]$Test = $false
+    [switch]$Test = $false,
+    [switch]$SkipAndroid = $false,
+    [switch]$SkipSetup = $false
 )
 
 $ErrorActionPreference = "Stop"
 $ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $StartTime = Get-Date
+$ProgressPreference = "SilentlyContinue"
 
 function Write-Header {
     param([string]$Message)
@@ -33,10 +36,15 @@ function Write-Error-Custom {
     Write-Host "✗ $Message" -ForegroundColor Red
 }
 
+function Write-Info {
+    param([string]$Message)
+    Write-Host "ℹ $Message" -ForegroundColor Blue
+}
+
 # Verify tools
 Write-Header "Pre-flight Checks"
 
-$tools = @("rustc", "cargo", "adb", "java", "javac")
+$tools = @("cargo")
 $missing = @()
 
 foreach ($tool in $tools) {
@@ -50,10 +58,131 @@ foreach ($tool in $tools) {
 }
 
 if ($missing.Count -gt 0) {
-    Write-Error-Custom "Missing tools: $($missing -join ', ')"
-    Write-Host "Run .\setup.ps1 -Install to fix" -ForegroundColor Yellow
+    Write-Error-Custom "Missing critical tools: $($missing -join ', ')"
     exit 1
 }
+
+# Download dependencies functions
+function Download-FFmpeg {
+    Write-Header "Preparing FFmpeg"
+    
+    $ffmpegExe = Join-Path $ScriptPath "ffmpeg.exe"
+    
+    if (Test-Path $ffmpegExe) {
+        Write-Success "ffmpeg.exe already present"
+        return
+    }
+    
+    $cacheDir = Join-Path $ScriptPath ".build-cache"
+    New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+    $ffmpegZip = Join-Path $cacheDir "ffmpeg.zip"
+    
+    if (-not (Test-Path $ffmpegZip)) {
+        Write-Info "Downloading FFmpeg (BtbN static GPL build)..."
+        $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $ffmpegZip -UseBasicParsing -ErrorAction Stop
+            Write-Success "FFmpeg downloaded"
+        } catch {
+            Write-Error-Custom "Failed to download FFmpeg: $_"
+            return
+        }
+    }
+    
+    Write-Host "Extracting FFmpeg..."
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ffmpegZip)
+    foreach ($entry in $zip.Entries) {
+        if ($entry.FullName -match "/bin/ffmpeg\.exe$") {
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $ffmpegExe, $true)
+            break
+        }
+    }
+    $zip.Dispose()
+    Write-Success "ffmpeg.exe ready"
+}
+
+function Download-ADB {
+    Write-Header "Preparing ADB"
+    
+    $adbNeeded = @("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")
+    $allPresent = $true
+    
+    foreach ($f in $adbNeeded) {
+        if (-not (Test-Path (Join-Path $ScriptPath $f))) {
+            $allPresent = $false
+            break
+        }
+    }
+    
+    if ($allPresent) {
+        Write-Success "ADB files already present"
+        return
+    }
+    
+    $cacheDir = Join-Path $ScriptPath ".build-cache"
+    New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+    $adbZip = Join-Path $cacheDir "adb.zip"
+    
+    if (-not (Test-Path $adbZip)) {
+        Write-Info "Downloading platform-tools..."
+        $url = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $adbZip -UseBasicParsing -ErrorAction Stop
+            Write-Success "platform-tools downloaded"
+        } catch {
+            Write-Error-Custom "Failed to download ADB: $_"
+            return
+        }
+    }
+    
+    Write-Host "Extracting ADB..."
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($adbZip)
+    foreach ($entry in $zip.Entries) {
+        $leaf = [System.IO.Path]::GetFileName($entry.FullName)
+        if ($adbNeeded -contains $leaf) {
+            $dest = Join-Path $ScriptPath $leaf
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
+        }
+    }
+    $zip.Dispose()
+    Write-Success "ADB files ready"
+}
+
+# Verify tools
+Write-Header "Pre-flight Checks"
+
+$tools = @("rustc", "cargo")
+$missing = @()
+
+foreach ($tool in $tools) {
+    try {
+        $version = & $tool --version 2>&1 | Select-Object -First 1
+        Write-Success "$tool installed: $version"
+    } catch {
+        $missing += $tool
+        Write-Error-Custom "$tool NOT found"
+    }
+}
+
+# Optional tools (Android, Java)
+if (-not $SkipAndroid) {
+    foreach ($tool in @("java", "javac")) {
+        try {
+            $version = & $tool -version 2>&1 | Select-Object -First 1
+            Write-Success "$tool installed: $version"
+        } catch {
+            Write-Error-Custom "$tool NOT found (Android build will fail)"
+        }
+    }
+}
+
+if ($missing.Count -gt 0) {
+    Write-Error-Custom "Missing critical tools: $($missing -join ', ')"
+    exit 1
+}
+
 
 # Build functions
 function Build-Host {
@@ -141,6 +270,55 @@ function Build-Android {
     }
 }
 
+function Build-Installer {
+    Write-Header "Building InnoSetup Installer"
+    
+    # Find InnoSetup installation
+    $innoDir = @(
+        "C:\Program Files (x86)\Inno Setup 6",
+        "C:\Program Files\Inno Setup 6",
+        "C:\Program Files (x86)\Inno Setup 5",
+        "C:\Program Files\Inno Setup 5"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    
+    if (-not $innoDir) {
+        Write-Error-Custom "Inno Setup not found"
+        Write-Info "Download from: https://jrsoftware.org/isdl.php"
+        return $null
+    }
+    
+    $iscc = Join-Path $innoDir "ISCC.exe"
+    $setupScript = Join-Path $ScriptPath "setup.iss"
+    
+    if (-not (Test-Path $setupScript)) {
+        Write-Error-Custom "setup.iss not found"
+        return $null
+    }
+    
+    Write-Info "Using Inno Setup: $innoDir"
+    Write-Host "Compiling: $setupScript"
+    
+    try {
+        & $iscc $setupScript
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "ISCC compilation failed"
+        }
+        
+        $installer = Join-Path $ScriptPath "dist\TabletMonitor-Setup.exe"
+        if (Test-Path $installer) {
+            Write-Success "Installer created: $installer"
+            return $installer
+        } else {
+            Write-Error-Custom "Installer file not created"
+            return $null
+        }
+    } catch {
+        Write-Error-Custom "Installer build error: $_"
+        return $null
+    }
+}
+
 function Deploy-APK {
     param([string]$ApkPath)
     
@@ -177,42 +355,62 @@ function Deploy-APK {
 }
 
 # Main execution
+Write-Info "Target: $Target | Release: $Release | Deploy: $Deploy"
+
+$results = @{}
+
 switch ($Target) {
     "host" {
-        $hostBinary = Build-Host -ReleaseMode $Release
-        if ($hostBinary -and -not $Deploy) {
-            Write-Header "Build Summary"
-            Write-Success "Host binary: $hostBinary"
-        }
+        Download-FFmpeg
+        Download-ADB
+        $results.host = Build-Host -ReleaseMode $Release
     }
     
     "android" {
-        $androidApk = Build-Android -ReleaseMode $Release
-        if ($androidApk) {
-            if ($Deploy) {
-                Deploy-APK -ApkPath $androidApk
-            } else {
-                Write-Header "Build Summary"
-                Write-Success "APK: $androidApk"
+        if (-not $SkipAndroid) {
+            $results.android = Build-Android -ReleaseMode $Release
+            if ($Deploy -and $results.android) {
+                Deploy-APK -ApkPath $results.android
             }
         }
     }
     
+    "installer" {
+        Download-FFmpeg
+        Download-ADB
+        if (-not $SkipAndroid) {
+            $results.android = Build-Android -ReleaseMode $Release
+        }
+        $results.host = Build-Host -ReleaseMode $Release
+        if (-not $SkipSetup) {
+            $results.installer = Build-Installer
+        }
+    }
+    
     "all" {
-        $hostBinary = Build-Host -ReleaseMode $Release
-        $androidApk = Build-Android -ReleaseMode $Release
+        Download-FFmpeg
+        Download-ADB
         
-        if ($Deploy -and $androidApk) {
-            Deploy-APK -ApkPath $androidApk
+        if (-not $SkipAndroid) {
+            $results.android = Build-Android -ReleaseMode $Release
+            if ($Deploy) {
+                Deploy-APK -ApkPath $results.android
+            }
         }
         
-        if ($hostBinary -or $androidApk) {
-            Write-Header "Build Summary"
-            if ($hostBinary) { Write-Success "Host: $hostBinary" }
-            if ($androidApk) { Write-Success "APK: $androidApk" }
+        $results.host = Build-Host -ReleaseMode $Release
+        
+        if (-not $SkipSetup) {
+            $results.installer = Build-Installer
         }
     }
 }
+
+# Summary
+Write-Header "Build Summary"
+if ($results.host) { Write-Success "Host: $($results.host)" }
+if ($results.android) { Write-Success "APK: $($results.android)" }
+if ($results.installer) { Write-Success "Installer: $($results.installer)" }
 
 # Timing
 $Duration = (Get-Date) - $StartTime

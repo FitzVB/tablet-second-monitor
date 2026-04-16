@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1"
 futures = "0.3"
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "process", "io-util"] }
@@ -16,4 +15,4 @@ warp = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["wingdi", "winuser"] }
+winapi = { version = "0.3", features = ["winuser"] }

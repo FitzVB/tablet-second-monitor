@@ -232,7 +232,26 @@ $env:TABLET_MONITOR_HW_ENCODER = "h264_nvenc"  # GPU encoder: h264_nvenc, h264_q
 $env:TABLET_MONITOR_LISTEN = "127.0.0.1"      # Listen address
 $env:TABLET_MONITOR_FPS = "60"                 # Target FPS
 $env:TABLET_MONITOR_BITRATE = "3500"           # Bitrate in kbps
+$env:TABLET_MONITOR_MODE = "mirror"            # mirror | extended
+$env:TABLET_MONITOR_EXTENDED_DISPLAY = "1"     # Optional display index override
 ```
+
+**Virtual Display Driver**:
+```powershell
+# Install a signed virtual display driver from winget
+.\scripts\install-virtual-display.ps1
+
+# Install from a bundled INF package instead
+.\scripts\install-virtual-display.ps1 -Provider inf -InfPath .\drivers\virtual-display\YourDriver.inf
+
+# Remove drivers matching the default filter
+.\scripts\remove-virtual-display.ps1
+```
+
+Notes:
+- `extended` only becomes a true external monitor when Windows has a non-primary display to extend onto.
+- For a software-only monitor, that means installing a signed indirect display driver.
+- After installation, the host exposes `http://127.0.0.1:9001/displays` so you can inspect detected display indexes.
 
 ---
 

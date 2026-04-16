@@ -1,43 +1,404 @@
-mod capture;
+mod input;
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{watch, RwLock};
 use tracing::{error, info};
-use uuid::Uuid;
-use warp::ws::{Message, WebSocket};
+use warp::ws::Message;
 use warp::Filter;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum SignalMessage {
-    Join { room: String, role: String },
-    Offer { room: String, sdp: String },
-    Answer { room: String, sdp: String },
-    IceCandidate { room: String, candidate: String },
-    PeerJoined { peer_id: String, role: String },
-    PeerLeft { peer_id: String },
-    Error { message: String },
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+struct HostSettings {
+    preferred_encoder: Option<String>,
+    preferred_amf_device: Option<u32>,
+    /// Named quality preset — overrides width/height/fps/bitrate when set.
+    preferred_preset: Option<String>,
+    // Legacy manual overrides (ignored when preferred_preset is set).
+    preferred_width: Option<u32>,
+    preferred_height: Option<u32>,
+    preferred_bitrate_kbps: Option<u32>,
 }
 
-#[derive(Clone)]
-struct Peer {
-    id: String,
-    tx: mpsc::UnboundedSender<Message>,
+#[derive(Clone, Debug, Serialize)]
+struct GpuInfo {
+        index: usize,
+        name: String,
+        driver_version: String,
 }
 
-type Rooms = Arc<RwLock<HashMap<String, Vec<Peer>>>>;
+#[derive(Clone, Debug, Serialize)]
+struct HostCapabilities {
+        encoders: Vec<String>,
+        gpus: Vec<GpuInfo>,
+}
 
-#[derive(Clone, Copy)]
-struct StreamConfig {
-    jpeg_quality: u8,
-    scale: u32,
-    fps: u32,
+fn canonical_encoder(value: Option<String>) -> Option<String> {
+        let raw = value?.trim().to_ascii_lowercase();
+        match raw.as_str() {
+                "h264_nvenc" | "h264_qsv" | "h264_amf" | "libx264" => Some(raw),
+                _ => None,
+        }
+}
+
+fn canonical_resolution(width: Option<u32>, height: Option<u32>) -> (Option<u32>, Option<u32>) {
+    let allowed = [
+        (800u32, 600u32),
+        (1024u32, 768u32),
+        (1280u32, 720u32),
+        (1600u32, 900u32),
+        (1920u32, 1080u32),
+    ];
+    match (width, height) {
+        (Some(w), Some(h)) if allowed.contains(&(w, h)) => (Some(w), Some(h)),
+        _ => (None, None),
+    }
+}
+
+fn canonical_bitrate_kbps(value: Option<u32>) -> Option<u32> {
+    let allowed = [3000u32, 5000u32, 10000u32, 15000u32, 25000u32, 30000u32, 50000u32];
+    let v = value?;
+    if allowed.contains(&v) {
+        Some(v)
+    } else {
+        None
+    }
+}
+
+fn canonical_preset(value: Option<String>) -> Option<String> {
+    let v = value?.trim().to_ascii_lowercase();
+    match v.as_str() {
+        "ahorro" | "equilibrado" | "alta_720p" | "fluido_900p" | "full_hd" | "full_hd_max" => Some(v),
+        _ => None,
+    }
+}
+
+/// Returns (width, height, fps, bitrate_kbps) for a named quality preset.
+/// Values are already macroblock-aligned (multiples of 16).
+fn resolve_preset(name: &str) -> Option<(u32, u32, u32, u32)> {
+    match name {
+        "ahorro"      => Some((960,  544, 30,  5_000)),
+        "equilibrado" => Some((1280, 720, 60, 10_000)),
+        "alta_720p"   => Some((1280, 720, 60, 15_000)),
+        "fluido_900p" => Some((1600, 900, 60, 20_000)),
+        "full_hd"     => Some((1920, 1080, 60, 25_000)),
+        "full_hd_max" => Some((1920, 1080, 60, 35_000)),
+        _ => None,
+    }
+}
+
+fn settings_file_path() -> std::path::PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            return dir.join("host-settings.json");
+        }
+    }
+    std::path::PathBuf::from("host-settings.json")
+}
+
+fn load_host_settings_from_disk() -> HostSettings {
+    let path = settings_file_path();
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return HostSettings::default();
+    };
+    serde_json::from_str::<HostSettings>(&text).unwrap_or_default()
+}
+
+fn save_host_settings_to_disk(settings: &HostSettings) {
+    let path = settings_file_path();
+    if let Ok(text) = serde_json::to_string_pretty(settings) {
+        let _ = std::fs::write(path, text);
+    }
+}
+
+fn detect_available_h264_encoders() -> Vec<String> {
+        let output = std::process::Command::new(ffmpeg_exe())
+                .arg("-hide_banner")
+                .arg("-encoders")
+                .output();
+
+        let Ok(out) = output else {
+                return vec!["libx264".to_string()];
+        };
+
+        let text = String::from_utf8_lossy(&out.stdout).to_ascii_lowercase();
+        let mut found = Vec::new();
+        for enc in ["h264_nvenc", "h264_qsv", "h264_amf", "libx264"] {
+                if text.contains(enc) {
+                        found.push(enc.to_string());
+                }
+        }
+        if found.is_empty() {
+                found.push("libx264".to_string());
+        }
+        found
+}
+
+fn detect_gpus() -> Vec<GpuInfo> {
+        #[derive(Debug, Deserialize)]
+        struct PsGpu {
+                #[serde(rename = "Name")]
+                name: Option<String>,
+                #[serde(rename = "DriverVersion")]
+                driver_version: Option<String>,
+        }
+
+        let ps = r#"Get-CimInstance Win32_VideoController |
+Select-Object Name,DriverVersion |
+ConvertTo-Json -Compress"#;
+        let output = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-Command", ps])
+                .output();
+
+        let Ok(out) = output else {
+                return Vec::new();
+        };
+
+        if out.stdout.is_empty() {
+                return Vec::new();
+        }
+
+        let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if text.is_empty() {
+                return Vec::new();
+        }
+
+        let mut parsed: Vec<PsGpu> = match serde_json::from_str::<Vec<PsGpu>>(&text) {
+                Ok(v) => v,
+                Err(_) => match serde_json::from_str::<PsGpu>(&text) {
+                        Ok(one) => vec![one],
+                        Err(_) => Vec::new(),
+                },
+        };
+
+        parsed
+                .drain(..)
+                .enumerate()
+                .map(|(idx, g)| GpuInfo {
+                        index: idx,
+                        name: g.name.unwrap_or_else(|| "Unknown GPU".to_string()),
+                        driver_version: g.driver_version.unwrap_or_default(),
+                })
+                .collect()
+}
+
+fn host_gui_html() -> &'static str {
+        r#"<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tablet Monitor Host</title>
+    <style>
+        :root {
+            --bg1:#0b1220;
+            --bg2:#0f1d3a;
+            --panel:#ffffff;
+            --text:#13203b;
+            --muted:#4c5a78;
+            --accent:#1677ff;
+            --ok:#11845b;
+        }
+        body { margin:0; font-family:Segoe UI, Tahoma, sans-serif; color:var(--text);
+            background:radial-gradient(1000px 450px at 0% 0%, #1a3b78 0%, transparent 60%),
+                                 radial-gradient(900px 450px at 100% 100%, #15305f 0%, transparent 60%),
+                                 linear-gradient(135deg, var(--bg1), var(--bg2));
+            min-height:100vh; display:flex; align-items:center; justify-content:center; }
+        .card { width:min(760px, 94vw); background:var(--panel); border-radius:16px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,.35); }
+        h1 { margin:0 0 8px; font-size:26px; }
+        .sub { color:var(--muted); margin-bottom:18px; }
+        .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        .row { display:flex; flex-direction:column; gap:6px; }
+        label { font-size:13px; color:var(--muted); }
+        select, button { border-radius:10px; border:1px solid #ccd3e4; padding:10px; font-size:14px; }
+        button { background:var(--accent); color:#fff; border:none; font-weight:600; cursor:pointer; }
+        button:hover { filter:brightness(1.05); }
+        .status { margin-top:14px; min-height:20px; font-weight:600; opacity:0; transition:opacity .2s ease; }
+        .status.visible { opacity:1; }
+        .status.busy { color:var(--muted); }
+        .status.ok { color:var(--ok); }
+        .status.error { color:#b02a37; }
+        .hint { margin-top:10px; font-size:13px; color:var(--muted); }
+        @media (max-width: 720px) { .grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Tablet Monitor Host</h1>
+        <div class="sub">Encoder, GPU y perfil de calidad del stream.</div>
+        <div class="grid">
+            <div class="row">
+                <label for="encoder">Encoder preferido</label>
+                <select id="encoder"></select>
+            </div>
+            <div class="row">
+                <label for="gpu">GPU preferida para AMF</label>
+                <select id="gpu"></select>
+            </div>
+            <div class="row" style="grid-column:span 2;">
+                <label for="preset">Perfil de calidad</label>
+                <select id="preset"></select>
+            </div>
+        </div>
+        <div style="margin-top:14px; display:flex; gap:8px;">
+            <button id="save">Guardar y aplicar</button>
+            <button id="refresh" style="background:#384865;">Recargar deteccion</button>
+        </div>
+        <div id="status" class="status"></div>
+        <div class="hint">Guardar y aplicar persiste el perfil seleccionado. Recargar deteccion vuelve a consultar GPUs y encoders del host, pero no guarda cambios pendientes.</div>
+    </div>
+<script>
+let statusTimer = null;
+
+function setStatus(message, kind = 'ok', autoClearMs = 0){
+    const el = document.getElementById('status');
+    if (!el) return;
+    if (statusTimer) {
+        clearTimeout(statusTimer);
+        statusTimer = null;
+    }
+    el.className = 'status visible ' + kind;
+    el.textContent = message;
+    if (autoClearMs > 0) {
+        statusTimer = setTimeout(() => {
+            el.textContent = '';
+            el.className = 'status';
+            statusTimer = null;
+        }, autoClearMs);
+    }
+}
+
+async function loadAll(){
+    const [capRes, setRes] = await Promise.all([fetch('/api/capabilities'), fetch('/api/settings')]);
+    const cap = await capRes.json();
+    const set = await setRes.json();
+
+    const enc = document.getElementById('encoder');
+    enc.innerHTML = '';
+    const auto = document.createElement('option'); auto.value=''; auto.textContent='auto'; enc.appendChild(auto);
+    (cap.encoders || []).forEach(e => { const o=document.createElement('option'); o.value=e; o.textContent=e; enc.appendChild(o); });
+    enc.value = set.preferred_encoder || '';
+
+    const gpu = document.getElementById('gpu');
+    gpu.innerHTML = '';
+    const ga = document.createElement('option'); ga.value=''; ga.textContent='auto'; gpu.appendChild(ga);
+    (cap.gpus || []).forEach(g => {
+        const o=document.createElement('option');
+        o.value=String(g.index);
+        o.textContent=`#${g.index} - ${g.name}${g.driver_version ? ' (' + g.driver_version + ')' : ''}`;
+        gpu.appendChild(o);
+    });
+    gpu.value = (set.preferred_amf_device ?? '') === '' ? '' : String(set.preferred_amf_device);
+
+    const preset = document.getElementById('preset');
+    preset.innerHTML = '';
+    const presetDefs = [
+        { value: '',           label: 'auto (desde cliente)' },
+        { value: 'ahorro',     label: 'Ahorro \u2014 960\u00d7544 \u00b7 30fps \u00b7 5 Mbps' },
+        { value: 'equilibrado',label: 'Equilibrado \u2014 1280\u00d7720 \u00b7 60fps \u00b7 10 Mbps' },
+        { value: 'alta_720p',  label: 'Alta calidad 720p \u2014 1280\u00d7720 \u00b7 60fps \u00b7 15 Mbps' },
+        { value: 'fluido_900p',label: 'Fluido 900p \u2014 1600\u00d7900 \u00b7 60fps \u00b7 20 Mbps' },
+        { value: 'full_hd',    label: 'Full HD oficina \u2014 1920\u00d71080 \u00b7 60fps \u00b7 25 Mbps' },
+        { value: 'full_hd_max',label: 'Full HD detalle \u2014 1920\u00d71080 \u00b7 60fps \u00b7 35 Mbps' },
+    ];
+    presetDefs.forEach(p => { const o=document.createElement('option'); o.value=p.value; o.textContent=p.label; preset.appendChild(o); });
+    preset.value = set.preferred_preset || '';
+}
+
+async function save(){
+    const saveBtn = document.getElementById('save');
+    saveBtn.disabled = true;
+    setStatus('Guardando configuracion...', 'busy');
+    const payload = {
+        preferred_encoder: document.getElementById('encoder').value || null,
+        preferred_amf_device: document.getElementById('gpu').value === '' ? null : Number(document.getElementById('gpu').value),
+        preferred_preset: document.getElementById('preset').value || null,
+        preferred_width: null,
+        preferred_height: null,
+        preferred_bitrate_kbps: null,
+    };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+        const res = await fetch('/api/settings', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+        });
+        if (res.ok) {
+            await loadAll();
+            setStatus('Configuracion guardada y aplicada', 'ok', 2600);
+        } else {
+            setStatus('No se pudo guardar', 'error', 5000);
+        }
+    } catch (_e) {
+        setStatus('Tiempo de espera agotado al guardar', 'error', 5000);
+    } finally {
+        clearTimeout(timeoutId);
+        saveBtn.disabled = false;
+    }
+}
+
+document.getElementById('save').addEventListener('click', save);
+document.getElementById('refresh').addEventListener('click', loadAll);
+loadAll();
+</script>
+</body>
+</html>"#
+}
+
+fn maybe_open_gui(listen_ip: std::net::Ipv4Addr) -> Option<std::sync::mpsc::Receiver<()>> {
+        if std::env::var("TABLET_MONITOR_DISABLE_AUTO_GUI").ok().as_deref() == Some("1") {
+        return None;
+        }
+        if !cfg!(windows) {
+        return None;
+        }
+
+        let host = if listen_ip == std::net::Ipv4Addr::UNSPECIFIED {
+                "127.0.0.1".to_string()
+        } else {
+                listen_ip.to_string()
+        };
+        let url = format!("http://{host}:9001");
+
+        // Prefer Edge app mode for an app-like desktop window (no tabs/address bar).
+        // Fallback to default browser if Edge is unavailable.
+        let edge_paths = [
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+            "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+        ];
+        for edge in edge_paths {
+            if std::path::Path::new(edge).exists() {
+                let child = std::process::Command::new(edge)
+                    .arg(format!("--app={url}"))
+                    .spawn();
+                if let Ok(mut child) = child {
+                    let (tx, rx) = std::sync::mpsc::channel::<()>();
+                    std::thread::spawn(move || {
+                        let started = std::time::Instant::now();
+                        let _ = child.wait();
+                        // Some systems briefly spawn/tear-down the Edge app process while
+                        // transferring to an existing browser instance. Ignore those transient
+                        // exits so host does not stop immediately on startup.
+                        if started.elapsed() >= std::time::Duration::from_secs(3) {
+                            let _ = tx.send(());
+                        }
+                    });
+                    return Some(rx);
+                }
+                return None;
+            }
+        }
+
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn();
+        None
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -45,10 +406,14 @@ struct StreamQuery {
     w: Option<u32>,
     h: Option<u32>,
     fps: Option<u32>,
-    q: Option<u8>,
-    fit: Option<String>,
     bitrate_kbps: Option<u32>,
     encoder: Option<String>,
+    display: Option<u32>,
+}
+
+#[derive(Clone, Debug, Deserialize, Default)]
+struct InputQuery {
+    mode: Option<String>,
     display: Option<u32>,
 }
 
@@ -59,39 +424,119 @@ async fn main() -> anyhow::Result<()> {
         .with_target(false)
         .init();
 
-    let rooms: Rooms = Arc::new(RwLock::new(HashMap::new()));
-    let rooms_filter = warp::any().map(move || rooms.clone());
+    let host_settings = Arc::new(RwLock::new(load_host_settings_from_disk()));
+    let host_settings_filter = warp::any().map({
+        let settings = host_settings.clone();
+        move || settings.clone()
+    });
+
+    // Incremented whenever GUI settings are saved so active streams can restart in-place.
+    let (settings_reload_tx, settings_reload_rx) = watch::channel(0u64);
+    let settings_reload_tx_filter = warp::any().map({
+        let tx = settings_reload_tx.clone();
+        move || tx.clone()
+    });
+    let settings_reload_rx_filter = warp::any().map({
+        let rx = settings_reload_rx.clone();
+        move || rx.clone()
+    });
 
     let health = warp::path("health").map(|| "ok");
 
-    let ws_route = warp::path("ws")
-        .and(warp::ws())
-        .and(rooms_filter)
-        .map(|ws: warp::ws::Ws, rooms| ws.on_upgrade(move |socket| handle_socket(socket, rooms)));
-
-    let stream_config = StreamConfig {
-        jpeg_quality: env_or("TABLET_MONITOR_JPEG_QUALITY", 58u8).clamp(15, 90),
-        scale: env_or("TABLET_MONITOR_SCALE", 2u32).max(1),
-        fps: env_or("TABLET_MONITOR_FPS", 18u32).clamp(5, 60),
-    };
-    let stream_cfg_filter = warp::any().map(move || stream_config);
     let stream_query_filter = warp::query::<StreamQuery>()
         .or(warp::any().map(StreamQuery::default))
         .unify();
 
-    let stream_route = warp::path("stream")
-        .and(warp::ws())
-        .and(stream_query_filter)
-        .and(stream_cfg_filter)
-        .map(|ws: warp::ws::Ws, query: StreamQuery, cfg: StreamConfig| {
-            ws.on_upgrade(move |socket| handle_stream(socket, cfg, query))
-        });
-
     let h264_route = warp::path("h264")
         .and(warp::ws())
         .and(stream_query_filter)
-        .map(|ws: warp::ws::Ws, query: StreamQuery| {
-            ws.on_upgrade(move |socket| handle_h264_stream(socket, query))
+        .and(host_settings_filter.clone())
+        .and(settings_reload_rx_filter.clone())
+        .map(|ws: warp::ws::Ws, query: StreamQuery, settings, reload_rx| {
+            ws.on_upgrade(move |socket| handle_h264_stream(socket, query, settings, reload_rx))
+        });
+
+    let input_query_filter = warp::query::<InputQuery>()
+        .or(warp::any().map(InputQuery::default))
+        .unify();
+
+    let input_route = warp::path("input")
+        .and(warp::ws())
+        .and(input_query_filter)
+        .map(|ws: warp::ws::Ws, query: InputQuery| {
+            ws.on_upgrade(move |socket| handle_input_socket(socket, query))
+        });
+
+    let ui_route = warp::path::end()
+        .and(warp::get())
+        .map(|| warp::reply::html(host_gui_html()));
+
+    let capabilities_route = warp::path!("api" / "capabilities")
+        .and(warp::get())
+        .map(|| {
+            let caps = HostCapabilities {
+                encoders: detect_available_h264_encoders(),
+                gpus: detect_gpus(),
+            };
+            warp::reply::json(&caps)
+        });
+
+    let settings_get_route = warp::path!("api" / "settings")
+        .and(warp::get())
+        .and(host_settings_filter.clone())
+        .and_then(|settings: Arc<RwLock<HostSettings>>| async move {
+            let snapshot = settings.read().await.clone();
+            Ok::<_, warp::Rejection>(warp::reply::json(&snapshot))
+        });
+
+    let settings_post_route = warp::path!("api" / "settings")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(host_settings_filter.clone())
+        .and(settings_reload_tx_filter)
+        .and_then(|incoming: HostSettings, settings: Arc<RwLock<HostSettings>>, reload_tx: watch::Sender<u64>| async move {
+            let (preferred_width, preferred_height) =
+                canonical_resolution(incoming.preferred_width, incoming.preferred_height);
+            let preferred_preset = canonical_preset(incoming.preferred_preset.clone());
+            // When a named preset is chosen, clear manual overrides so they don't
+            // shadow the preset on the next load.
+            let (eff_width, eff_height, eff_bitrate) = if preferred_preset.is_some() {
+                (None, None, None)
+            } else {
+                (preferred_width, preferred_height, canonical_bitrate_kbps(incoming.preferred_bitrate_kbps))
+            };
+            let normalized = HostSettings {
+                preferred_encoder: canonical_encoder(incoming.preferred_encoder),
+                preferred_amf_device: incoming.preferred_amf_device,
+                preferred_preset,
+                preferred_width: eff_width,
+                preferred_height: eff_height,
+                preferred_bitrate_kbps: eff_bitrate,
+            };
+            {
+                let mut write = settings.write().await;
+                *write = normalized.clone();
+            }
+            let normalized_for_background = normalized.clone();
+            let next_reload_version = *reload_tx.borrow() + 1;
+            tokio::spawn(async move {
+                let to_save = normalized_for_background.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    save_host_settings_to_disk(&to_save);
+                })
+                .await;
+                let _ = reload_tx.send(next_reload_version);
+                info!(
+                    encoder = ?normalized_for_background.preferred_encoder,
+                    amf_device = ?normalized_for_background.preferred_amf_device,
+                    preset = ?normalized_for_background.preferred_preset,
+                    width = ?normalized_for_background.preferred_width,
+                    height = ?normalized_for_background.preferred_height,
+                    bitrate_kbps = ?normalized_for_background.preferred_bitrate_kbps,
+                    "host settings updated via GUI"
+                );
+            });
+            Ok::<_, warp::Rejection>(warp::reply::json(&normalized))
         });
 
     // Default to 0.0.0.0 so Wi-Fi connections work without setting the env var.
@@ -101,233 +546,41 @@ async fn main() -> anyhow::Result<()> {
     let listen_ip: std::net::Ipv4Addr =
         listen_host.parse().unwrap_or(std::net::Ipv4Addr::LOCALHOST);
 
-    info!(%listen_ip, "signaling server listening on {}:9001", listen_ip);
-    warp::serve(health.or(ws_route).or(stream_route).or(h264_route))
-        .run((listen_ip.octets(), 9001))
+    info!(%listen_ip, "host server listening on {}:9001", listen_ip);
+    let gui_closed_rx = maybe_open_gui(listen_ip);
+    let exit_on_gui_close =
+        std::env::var("TABLET_MONITOR_EXIT_ON_GUI_CLOSE").ok().as_deref() == Some("1");
+
+    let routes =
+        ui_route
+            .or(health)
+            .or(capabilities_route)
+            .or(settings_get_route)
+            .or(settings_post_route)
+            .or(h264_route)
+            .or(input_route);
+
+    let shutdown_signal = async move {
+        if exit_on_gui_close {
+            if let Some(rx) = gui_closed_rx {
+                let _ = tokio::task::spawn_blocking(move || rx.recv()).await;
+                info!("GUI window closed, stopping host process");
+            } else {
+                std::future::pending::<()>().await;
+            }
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
+
+    warp::serve(routes)
+        .bind_with_graceful_shutdown((listen_ip.octets(), 9001), shutdown_signal)
+        .1
         .await;
 
     Ok(())
 }
 
-async fn handle_socket(socket: WebSocket, rooms: Rooms) {
-    let peer_id = Uuid::new_v4().to_string();
-    let (mut ws_tx, mut ws_rx) = socket.split();
-
-    let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
-    let send_task = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            if ws_tx.send(msg).await.is_err() {
-                break;
-            }
-        }
-    });
-
-    let mut joined_room: Option<String> = None;
-    let mut my_role = String::from("unknown");
-
-    while let Some(result) = ws_rx.next().await {
-        match result {
-            Ok(msg) if msg.is_text() => {
-                let text = match msg.to_str() {
-                    Ok(t) => t,
-                    Err(_) => continue,
-                };
-
-                let parsed: Result<SignalMessage, _> = serde_json::from_str(text);
-                let signal = match parsed {
-                    Ok(s) => s,
-                    Err(e) => {
-                        let _ = tx.send(Message::text(
-                            serde_json::to_string(&SignalMessage::Error {
-                                message: format!("invalid json: {e}"),
-                            })
-                            .unwrap_or_else(|_| {
-                                "{\"type\":\"error\",\"message\":\"parse\"}".into()
-                            }),
-                        ));
-                        continue;
-                    }
-                };
-
-                match signal {
-                    SignalMessage::Join { room, role } => {
-                        my_role = role.clone();
-                        joined_room = Some(room.clone());
-
-                        {
-                            let mut map = rooms.write().await;
-                            let peers = map.entry(room.clone()).or_default();
-
-                            peers.push(Peer {
-                                id: peer_id.clone(),
-                                tx: tx.clone(),
-                            });
-                        }
-
-                        broadcast(
-                            &rooms,
-                            &room,
-                            &peer_id,
-                            &SignalMessage::PeerJoined {
-                                peer_id: peer_id.clone(),
-                                role,
-                            },
-                        )
-                        .await;
-
-                        info!(%peer_id, %room, "peer joined room");
-                    }
-                    SignalMessage::Offer { room, sdp } => {
-                        let outbound = SignalMessage::Offer {
-                            room: room.clone(),
-                            sdp,
-                        };
-                        relay(&rooms, &room, &peer_id, &outbound).await;
-                    }
-                    SignalMessage::Answer { room, sdp } => {
-                        let outbound = SignalMessage::Answer {
-                            room: room.clone(),
-                            sdp,
-                        };
-                        relay(&rooms, &room, &peer_id, &outbound).await;
-                    }
-                    SignalMessage::IceCandidate { room, candidate } => {
-                        let outbound = SignalMessage::IceCandidate {
-                            room: room.clone(),
-                            candidate,
-                        };
-                        relay(&rooms, &room, &peer_id, &outbound).await;
-                    }
-                    _ => {}
-                }
-            }
-            Ok(msg) if msg.is_close() => break,
-            Ok(_) => {}
-            Err(e) => {
-                error!(%peer_id, "websocket error: {e}");
-                break;
-            }
-        }
-    }
-
-    if let Some(room) = joined_room {
-        let mut map = rooms.write().await;
-        if let Some(peers) = map.get_mut(&room) {
-            peers.retain(|p| p.id != peer_id);
-        }
-        drop(map);
-
-        broadcast(
-            &rooms,
-            &room,
-            &peer_id,
-            &SignalMessage::PeerLeft {
-                peer_id: peer_id.clone(),
-            },
-        )
-        .await;
-
-        info!(%peer_id, %room, role = %my_role, "peer left room");
-    }
-
-    send_task.abort();
-}
-
-async fn relay(rooms: &Rooms, room: &str, sender: &str, message: &SignalMessage) {
-    let payload = match serde_json::to_string(message) {
-        Ok(v) => v,
-        Err(_) => return,
-    };
-
-    let map = rooms.read().await;
-    if let Some(peers) = map.get(room) {
-        for peer in peers {
-            if peer.id != sender {
-                let _ = peer.tx.send(Message::text(payload.clone()));
-            }
-        }
-    }
-}
-
-fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
-    std::env::var(name)
-        .ok()
-        .and_then(|v| v.parse::<T>().ok())
-        .unwrap_or(default)
-}
-
-async fn handle_stream(socket: warp::ws::WebSocket, cfg: StreamConfig, query: StreamQuery) {
-    use std::sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    };
-
-    let (mut ws_tx, mut ws_rx) = socket.split();
-    let running = Arc::new(AtomicBool::new(true));
-    let running2 = running.clone();
-
-    // Detectar cierre de la conexión
-    tokio::spawn(async move {
-        while let Some(Ok(msg)) = ws_rx.next().await {
-            if msg.is_close() {
-                break;
-            }
-        }
-        running2.store(false, Ordering::Relaxed);
-    });
-
-    let (screen_w, screen_h) = capture::screen_size();
-    let out_w = query
-        .w
-        .unwrap_or((screen_w / cfg.scale).max(1))
-        .clamp(320, screen_w);
-    let out_h = query
-        .h
-        .unwrap_or((screen_h / cfg.scale).max(1))
-        .clamp(240, screen_h);
-    let fps = query.fps.unwrap_or(cfg.fps).clamp(5, 60);
-    let quality = query.q.unwrap_or(cfg.jpeg_quality).clamp(15, 90);
-    let fit_mode = match query.fit.as_deref() {
-        Some("contain") => capture::FitMode::Contain,
-        _ => capture::FitMode::Cover,
-    };
-
-    info!(out_w, out_h, fps, quality, fit = ?query.fit, "stream client connected");
-
-    let frame_ms = (1000 / fps.max(1)) as u64;
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(frame_ms));
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-    loop {
-        interval.tick().await;
-
-        if !running.load(Ordering::Relaxed) {
-            break;
-        }
-
-        let frame = tokio::task::spawn_blocking(move || {
-            capture::capture_jpeg_to_size(quality, out_w, out_h, fit_mode)
-        })
-        .await;
-
-        match frame {
-            Ok(Ok(jpeg)) => {
-                if ws_tx.send(Message::binary(jpeg)).await.is_err() {
-                    break;
-                }
-            }
-            Ok(Err(e)) => {
-                error!("capture error: {e}");
-            }
-            Err(e) => {
-                error!("spawn_blocking error: {e}");
-                break;
-            }
-        }
-    }
-
-    info!("stream client disconnected");
-}
 
 /// Capture backend passed to `stream_with_ffmpeg`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -374,123 +627,361 @@ fn encoder_extra_args(encoder: &str) -> Vec<String> {
             "-bf".into(),
             "0".into(),
         ],
-        "h264_amf" => vec!["-quality".into(), "speed".into(), "-bf".into(), "0".into()],
+        "h264_amf" => vec![
+            // Keep low-latency transport while avoiding motion-analysis spikes that can
+            // show up as microstutter during sustained video playback.
+            "-usage".into(), "lowlatency".into(),
+            "-quality".into(), "balanced".into(),
+            "-latency".into(), "true".into(),
+            "-rc".into(), "cbr".into(),
+            "-async_depth".into(), "1".into(),
+            "-profile".into(), "high".into(),
+            "-coder".into(), "cabac".into(),
+            "-bf".into(), "0".into(),
+            "-max_b_frames".into(), "0".into(),
+            "-vbaq".into(), "true".into(),
+        ],
         "libx264" => vec![
             "-preset".into(),
             "ultrafast".into(),
             // zerolatency: disables lookahead + sets bf=0 + rc_lookahead=0
             "-tune".into(),
             "zerolatency".into(),
+            // Constrained baseline improves compatibility with mobile AVC decoders.
+            "-profile:v".into(),
+            "baseline".into(),
+            // 1600x900@60 can exceed Level 4.1 macroblock rate limits.
+            // Declare 5.1 to avoid decoder-side throttling behavior.
+            "-level".into(),
+            "5.1".into(),
+            // Disable CABAC/B-frames/high refs to avoid pink/green macroblock artifacts.
+            "-x264-params".into(),
+            "bframes=0:scenecut=0:ref=1:cabac=0:rc-lookahead=0:sync-lookahead=0:repeat-headers=1:aud=1:sliced-threads=0".into(),
         ],
         _ => vec!["-bf".into(), "0".into()],
     }
 }
 
-async fn handle_h264_stream(socket: warp::ws::WebSocket, query: StreamQuery) {
+fn amf_device_from_pre_args(pre_args: &[String]) -> Option<u32> {
+    if pre_args.len() < 2 || pre_args[0] != "-init_hw_device" {
+        return None;
+    }
+    let spec = pre_args[1].strip_prefix("d3d11va=amf_dx:")?;
+    spec.parse::<u32>().ok()
+}
+
+async fn handle_h264_stream(
+    socket: warp::ws::WebSocket,
+    query: StreamQuery,
+    settings: Arc<RwLock<HostSettings>>,
+    mut reload_rx: watch::Receiver<u64>,
+) {
     use std::sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     };
 
     let (mut ws_tx, mut ws_rx) = socket.split();
-    let running = Arc::new(AtomicBool::new(true));
-    let running2 = running.clone();
+    let _ = *reload_rx.borrow_and_update();
+    let connection_alive = Arc::new(AtomicBool::new(true));
+    let connection_alive_watcher = connection_alive.clone();
+    let restart_requested = Arc::new(AtomicBool::new(false));
+    let restart_requested_watcher = restart_requested.clone();
 
-    tokio::spawn(async move {
+    let ws_close_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = ws_rx.next().await {
             if msg.is_close() {
                 break;
             }
         }
-        running2.store(false, Ordering::Relaxed);
+        connection_alive_watcher.store(false, Ordering::Relaxed);
     });
 
-    let (screen_w, screen_h) = capture::screen_size();
-    // H.264/yuv420p requires even dimensions — mask the lowest bit
-    let out_w = query.w.unwrap_or(960).clamp(320, screen_w) & !1;
-    let out_h = query.h.unwrap_or(540).clamp(240, screen_h) & !1;
-    let fps = query.fps.unwrap_or(60).clamp(10, 60);
-    let bitrate = query.bitrate_kbps.unwrap_or(4000).clamp(1000, 50000);
-    let display_idx = query.display.unwrap_or(0).clamp(0, 9);
-
-    let preferred = query
-        .encoder
-        .clone()
-        .or_else(|| std::env::var("TABLET_MONITOR_HW_ENCODER").ok());
-
-    // Build ordered candidate list: (encoder, capture_backend).
-    // HW encoders are tried first with ddagrab (GPU capture, low CPU) then with gdigrab
-    // as fallback in case the display adapter doesn't support DXGI duplication.
-    // libx264 only uses gdigrab (no gain from ddagrab for software encoding).
-    let hw: &[&str] = &["h264_nvenc", "h264_qsv", "h264_amf"];
-    let mut candidates: Vec<(String, Capture)> = Vec::new();
-
-    if let Some(pref) = preferred.as_deref() {
-        if hw.contains(&pref) {
-            candidates.push((pref.into(), Capture::Ddagrab));
+    let reload_watch_task = tokio::spawn(async move {
+        while reload_rx.changed().await.is_ok() {
+            info!("settings changed, requesting active h264 stream restart");
+            restart_requested_watcher.store(true, Ordering::Relaxed);
         }
-        candidates.push((pref.into(), Capture::Gdigrab));
-    }
+    });
 
-    for &enc in hw {
-        if preferred.as_deref() != Some(enc) {
-            candidates.push((enc.into(), Capture::Ddagrab));
-            candidates.push((enc.into(), Capture::Gdigrab));
+    while connection_alive.load(Ordering::Relaxed) {
+        restart_requested.store(false, Ordering::Relaxed);
+
+        let settings_snapshot = settings.read().await.clone();
+
+        // Resolve active (width, height, fps, bitrate) — preset takes full priority.
+        let (out_w, out_h, fps, bitrate) = if let Some(ref pname) = settings_snapshot.preferred_preset {
+            if let Some((pw, ph, pfps, pbr)) = resolve_preset(pname) {
+                (pw, ph, pfps, pbr)
+            } else {
+                // Unknown preset name — fall back to manual/client values.
+                let rw = settings_snapshot.preferred_width.or(query.w).unwrap_or(960);
+                let rh = settings_snapshot.preferred_height.or(query.h).unwrap_or(540);
+                (
+                    rw.clamp(320, 3840) & !15,
+                    rh.clamp(240, 2160) & !15,
+                    query.fps.unwrap_or(60).clamp(10, 60),
+                    settings_snapshot.preferred_bitrate_kbps.or(query.bitrate_kbps).unwrap_or(4000).clamp(1000, 50000),
+                )
+            }
+        } else {
+            // No preset — use host manual overrides, then client query, then defaults.
+            let rw = settings_snapshot.preferred_width.or(query.w).unwrap_or(960);
+            let rh = settings_snapshot.preferred_height.or(query.h).unwrap_or(540);
+            (
+                rw.clamp(320, 3840) & !15,
+                rh.clamp(240, 2160) & !15,
+                query.fps.unwrap_or(60).clamp(10, 60),
+                settings_snapshot.preferred_bitrate_kbps.or(query.bitrate_kbps).unwrap_or(4000).clamp(1000, 50000),
+            )
+        };
+        let display_idx = query.display.unwrap_or(0).clamp(0, 9);
+
+        let preferred = settings_snapshot
+            .preferred_encoder
+            .clone()
+            .or_else(|| query.encoder.clone())
+            .or_else(|| std::env::var("TABLET_MONITOR_HW_ENCODER").ok());
+        let manual_encoder_selected = preferred.is_some();
+
+        let selected_amf_device = settings_snapshot.preferred_amf_device;
+        // Build AMF device fallbacks from detected GPUs instead of hardcoding a single index.
+        // Priority: selected GPU first (if any), then remaining GPUs, then implicit AMF default.
+        let gpu_count = detect_gpus().len().min(10) as u32;
+        let mut amf_device_order: Vec<u32> = Vec::new();
+        if let Some(idx) = selected_amf_device {
+            amf_device_order.push(idx);
         }
-    }
+        for idx in 0..gpu_count {
+            if Some(idx) != selected_amf_device {
+                amf_device_order.push(idx);
+            }
+        }
+        // Prefer the last known-good AMF GPU first, then try the remaining GPUs,
+        // and only then fall back to ffmpeg's implicit default device selection.
+        let mut amf_pre_args_candidates: Vec<Vec<String>> = amf_device_order
+            .into_iter()
+            .map(|idx| vec!["-init_hw_device".into(), format!("d3d11va=amf_dx:{idx}")])
+            .collect();
+        amf_pre_args_candidates.push(vec![]);
 
-    if preferred.as_deref() != Some("libx264") {
-        candidates.push(("libx264".into(), Capture::Gdigrab));
-    }
+        let hw: &[&str] = &["h264_nvenc", "h264_qsv", "h264_amf"];
+        let mut candidates: Vec<(String, Capture, Vec<String>)> = Vec::new();
 
-    info!(out_w, out_h, fps, bitrate, "h264 stream client connected");
-
-    let mut started = false;
-    for (encoder, capture) in &candidates {
-        if !running.load(Ordering::Relaxed) {
-            return;
+        if let Some(pref) = preferred.as_deref() {
+            if hw.contains(&pref) {
+                if pref == "h264_amf" {
+                    for pre in &amf_pre_args_candidates {
+                        candidates.push((pref.into(), Capture::Ddagrab, pre.clone()));
+                    }
+                } else {
+                    candidates.push((pref.into(), Capture::Ddagrab, vec![]));
+                }
+            } else if pref == "libx264" {
+                candidates.push((pref.into(), Capture::Ddagrab, vec![]));
+            }
+            candidates.push((pref.into(), Capture::Gdigrab, vec![]));
         }
 
-        info!(encoder = %encoder, capture = ?capture, "trying encoder/capture combination");
+        if manual_encoder_selected {
+            info!(preferred = ?preferred, "manual encoder requested: priority mode with fallback");
+        }
 
-        match stream_with_ffmpeg(
-            &mut ws_tx,
-            &running,
-            FfmpegConfig {
-                out_w,
-                out_h,
-                fps,
-                bitrate_kbps: bitrate,
-                display_idx,
-                encoder: encoder.to_string(),
-                capture: *capture,
-            },
-        )
-        .await
         {
-            Ok(true) => {
-                started = true;
+            if preferred.as_deref() != Some("libx264") {
+                candidates.push(("libx264".into(), Capture::Ddagrab, vec![]));
+            }
+
+            for &enc in hw {
+                if preferred.as_deref() != Some(enc) {
+                    if enc == "h264_amf" {
+                        for pre in &amf_pre_args_candidates {
+                            candidates.push((enc.into(), Capture::Ddagrab, pre.clone()));
+                        }
+                    } else {
+                        candidates.push((enc.into(), Capture::Ddagrab, vec![]));
+                    }
+                    candidates.push((enc.into(), Capture::Gdigrab, vec![]));
+                }
+            }
+
+            if preferred.as_deref() != Some("libx264") {
+                candidates.push(("libx264".into(), Capture::Gdigrab, vec![]));
+            }
+        }
+
+        info!(out_w, out_h, fps, bitrate, "h264 stream active profile");
+
+        let mut started = false;
+        for (encoder, capture, pre_args) in &candidates {
+            if !connection_alive.load(Ordering::Relaxed) {
                 break;
             }
-            Ok(false) => {
-                // ffmpeg exited immediately → encoder/capture not available; try next candidate.
-                info!(encoder = %encoder, capture = ?capture, "not available, trying next");
+            if restart_requested.load(Ordering::Relaxed) {
+                break;
             }
-            Err(e) => {
-                error!(encoder = %encoder, "ffmpeg stream error: {e}");
+
+            let profile_msg = format!(
+                "CFG:encoder={};capture={:?};w={};h={};fps={};bitrate_kbps={}",
+                encoder, capture, out_w, out_h, fps, bitrate
+            );
+            let _ = ws_tx.send(Message::text(profile_msg)).await;
+
+            let amf_device = if encoder == "h264_amf" {
+                amf_device_from_pre_args(pre_args)
+            } else {
+                None
+            };
+            info!(encoder = %encoder, capture = ?capture, amf_device = ?amf_device, "trying encoder/capture combination");
+
+            match stream_with_ffmpeg(
+                &mut ws_tx,
+                &connection_alive,
+                &restart_requested,
+                FfmpegConfig {
+                    out_w,
+                    out_h,
+                    fps,
+                    bitrate_kbps: bitrate,
+                    display_idx,
+                    encoder: encoder.to_string(),
+                    capture: *capture,
+                    pre_input_args: pre_args.clone(),
+                },
+                if encoder == "h264_amf" {
+                    Some(settings.clone())
+                } else {
+                    None
+                },
+            )
+            .await
+            {
+                Ok(exit) => {
+                    match exit {
+                        StreamExit::Streamed => {
+                            started = true;
+                            break;
+                        }
+                        StreamExit::RestartRequested => {
+                            started = true;
+                            break;
+                        }
+                        StreamExit::Unavailable => {
+                            info!(encoder = %encoder, capture = ?capture, amf_device = ?amf_device, "not available, trying next");
+                        }
+                        StreamExit::SocketClosed => {
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!(encoder = %encoder, "ffmpeg stream error: {e}");
+                    if e.to_string().to_ascii_lowercase().contains("program not found") {
+                        let _ = ws_tx
+                            .send(Message::text(
+                                "{\"type\":\"error\",\"message\":\"FFmpeg no encontrado. Instala ffmpeg o configura TABLET_MONITOR_FFMPEG\"}".to_string(),
+                            ))
+                            .await;
+                        break;
+                    }
+                }
             }
         }
-    }
 
-    if !started {
-        let _ = ws_tx
-            .send(Message::text(
-                "{\"type\":\"error\",\"message\":\"No H.264 encoder available (ffmpeg)\"}",
-            ))
-            .await;
+        if !connection_alive.load(Ordering::Relaxed) {
+            break;
+        }
+
+        if restart_requested.load(Ordering::Relaxed) {
+            let _ = ws_tx.send(Message::text("RESET")).await;
+            info!("hot settings apply: closing current h264 stream so client can reconnect cleanly");
+            break;
+        }
+
+        if !started {
+            let requested = query.encoder.as_deref().unwrap_or("auto");
+            let attempted = candidates
+                .iter()
+                .map(|(enc, cap, _)| format!("{enc}/{cap:?}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let msg = if attempted.is_empty() {
+                format!("No H.264 encoder available (requested={requested}, attempted=none)")
+            } else {
+                format!("No H.264 encoder available (requested={requested}, attempted={attempted})")
+            };
+            error!(%msg, "h264 setup failed");
+            let _ = ws_tx
+                .send(Message::text(
+                    format!("{{\"type\":\"error\",\"message\":\"{}\"}}", msg),
+                ))
+                .await;
+            break;
+        }
     }
 
     info!("h264 stream client disconnected");
+    ws_close_task.abort();
+    reload_watch_task.abort();
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StreamExit {
+    Streamed,
+    RestartRequested,
+    Unavailable,
+    SocketClosed,
+}
+
+async fn handle_input_socket(socket: warp::ws::WebSocket, query: InputQuery) {
+    let (mut ws_tx, mut ws_rx) = socket.split();
+    let mode = query.mode.unwrap_or_else(|| "mirror".to_string());
+    let display_idx = query.display.unwrap_or(0);
+
+    info!(mode, display_idx, "input channel connected");
+
+    while let Some(result) = ws_rx.next().await {
+        match result {
+            Ok(msg) if msg.is_text() => {
+                let text = match msg.to_str() {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+
+                // Ping/pong for input RTT measurement.
+                // Client sends {"type":"ping","ts_ms":N}, host echoes {"type":"pong","ts_ms":N}.
+                // This lets the Android HUD display the full input round-trip time so the
+                // user can distinguish "input channel lag" from "video pipeline lag".
+                if let Ok(obj) = serde_json::from_str::<serde_json::Value>(text) {
+                    if obj.get("type").and_then(|v| v.as_str()) == Some("ping") {
+                        let ts_ms = obj.get("ts_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let pong = format!(r#"{{"type":"pong","ts_ms":{ts_ms}}}"#);
+                        let _ = ws_tx.send(Message::text(pong)).await;
+                        continue;
+                    }
+                }
+
+                match serde_json::from_str::<input::PointerInputEvent>(text) {
+                    Ok(event) => {
+                        if let Err(e) = input::inject_pointer_event(&event) {
+                            error!("input inject error: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        error!("invalid input payload: {e}");
+                    }
+                }
+            }
+            Ok(msg) if msg.is_close() => break,
+            Ok(_) => {}
+            Err(e) => {
+                error!("input websocket error: {e}");
+                break;
+            }
+        }
+    }
+
+    info!("input channel disconnected");
 }
 
 struct FfmpegConfig {
@@ -501,14 +992,22 @@ struct FfmpegConfig {
     display_idx: u32,
     encoder: String,
     capture: Capture,
+    /// Arguments inserted before the first -f/-i input specifier.
+    /// Used to pre-initialise a specific HW device (e.g. for multi-GPU routing).
+    pre_input_args: Vec<String>,
 }
 
 async fn stream_with_ffmpeg(
     ws_tx: &mut futures::stream::SplitSink<warp::ws::WebSocket, Message>,
-    running: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+    connection_alive: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+    restart_requested: &std::sync::Arc<std::sync::atomic::AtomicBool>,
     config: FfmpegConfig,
-) -> anyhow::Result<bool> {
+    amf_settings: Option<Arc<RwLock<HostSettings>>>,
+) -> anyhow::Result<StreamExit> {
     let mut args: Vec<String> = Vec::new();
+
+    // Pre-input args (e.g. "-init_hw_device d3d11va=amf_dx:1") must precede -f/-i.
+    args.extend(config.pre_input_args.iter().cloned());
 
     // --- Input source ---
     match config.capture {
@@ -549,11 +1048,16 @@ async fn stream_with_ffmpeg(
     //   fewer than `fps` (e.g. 59.94 Hz display gives 59fps with passthrough).
     //   Frame duplication is imperceptible at 60fps and guarantees the decoder always
     //   has exactly 60 frames per second to consume.
+    // avioflags direct: bypass the AVIOContext output write-buffer and write encoded
+    //   bytes directly to the pipe fd. Eliminates the avio layer's internal 32 KB buffer
+    //   that can hold up a partial NAL unit before flushing.
     args.extend([
         "-fflags".into(),
         "+nobuffer".into(),
         "-flags".into(),
         "+low_delay".into(),
+        "-avioflags".into(),
+        "direct".into(),
         "-fps_mode".into(),
         "cfr".into(),
     ]);
@@ -576,19 +1080,43 @@ async fn stream_with_ffmpeg(
     args.extend(["-c:v".into(), config.encoder.clone()]);
     args.extend(encoder_extra_args(&config.encoder));
 
+    // libx264 on CPU has higher encode cost at very high bitrates; capping bitrate
+    // reduces encode queueing and usually lowers interaction latency on CPU-only hosts.
+    let effective_bitrate_kbps = if config.encoder == "libx264" {
+        config.bitrate_kbps.min(12000)
+    } else if config.encoder == "h264_amf" {
+        // AMF shows fewer macroblock artifacts in fast motion with a slightly higher floor.
+        config.bitrate_kbps.max(18000)
+    } else {
+        config.bitrate_kbps
+    };
+
     // --- Bitrate / GOP ---
-    // g = fps/2: keyframe every 0.5s — faster recovery and lower decode latency than 1s.
-    // bufsize = bitrate/4 (250ms VBV): balances encode latency vs quality on scene changes.
-    // bitrate/8 (125ms) caused visible artifacts by starving the encoder on fast-moving scenes.
-    let bufsize = config.bitrate_kbps / 4;
-    let gop = config.fps / 2;
+    // GOP = 1 second: avoids large IDR bursts while keeping seek/reconnect latency low.
+    // VBV = bitrate/4: gives the encoder ~2x the per-frame budget for I-frames so they
+    // are never under-constrained (which causes the blocky flicker every GOP interval).
+    // bitrate/8 would save ~1 frame but I-frames become visibly compressed on motion.
+    // AMF benefits from a roomier VBV buffer in 1080p motion scenes; it reduces visible
+    // blockiness and pacing spikes without reintroducing deep buffering.
+    let bufsize = if config.encoder == "h264_amf" {
+        effective_bitrate_kbps / 2
+    } else {
+        effective_bitrate_kbps / 4
+    };
+    // AMF looks smoother in video playback with a 1-second GOP; other encoders keep the
+    // shorter half-second GOP that improves rapid full-scene refresh.
+    let gop = if config.encoder == "h264_amf" {
+        config.fps.clamp(30, 60)
+    } else {
+        (config.fps / 2).clamp(15, 30)
+    };
     args.extend([
         "-g".into(),
         gop.to_string(),
         "-b:v".into(),
-        format!("{}k", config.bitrate_kbps),
+        format!("{}k", effective_bitrate_kbps),
         "-maxrate".into(),
-        format!("{}k", config.bitrate_kbps),
+        format!("{}k", effective_bitrate_kbps),
         "-bufsize".into(),
         format!("{}k", bufsize),
         // dump_extra: Repeat the SPS+PPS parameter sets before every IDR frame.
@@ -615,57 +1143,114 @@ async fn stream_with_ffmpeg(
         .ok_or_else(|| anyhow::anyhow!("ffmpeg stdout unavailable"))?;
 
     // Drain stderr in background so it never blocks the child process.
+    // Lines that look like errors are elevated to WARN so encoder failures are visible
+    // in the console without flooding it with normal ffmpeg statistics.
+    let enc_name_for_log = config.encoder.clone();
     if let Some(stderr) = child.stderr.take() {
         tokio::spawn(async move {
             use tokio::io::AsyncBufReadExt;
             let mut lines = tokio::io::BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                tracing::debug!(target: "ffmpeg", "{}", line);
+                let low = line.to_ascii_lowercase();
+                if low.contains("error") || low.contains("invalid") || low.contains("could not") || low.contains("no such") || low.contains("failed") {
+                    tracing::warn!(encoder = %enc_name_for_log, "ffmpeg: {}", line);
+                } else {
+                    tracing::debug!(target: "ffmpeg", "{}", line);
+                }
             }
         });
     }
 
-    // 128 KB buffer: handles large I-frames (keyframes at 4 Mbps can be ~100 KB).
-    let mut buf = vec![0u8; 128 * 1024];
+    // 4 KB chunks: at 12 Mbps each 16 KB buffer holds ~11 ms of encoded video before
+    // it's sent. Cutting to 4 KB reduces that to ~2.7 ms — a real latency reduction
+    // without changing any codec or transport parameter.
+    let mut buf = vec![0u8; 4 * 1024];
     let mut sent_any = false;
 
-    while running.load(std::sync::atomic::Ordering::Relaxed) {
-        let n = stdout.read(&mut buf).await?;
-        if n == 0 {
-            break; // ffmpeg exited (encoder unavailable or finished)
-        }
-        if !sent_any {
-            info!(encoder = %config.encoder, "first H.264 bytes sent to client ({n} bytes)");
-        }
-        sent_any = true;
-        if ws_tx
-            .send(Message::binary(buf[..n].to_vec()))
-            .await
-            .is_err()
-        {
-            break;
+    // Timestamp ticker: every 100 ms send a text frame "T:<host_microseconds_utc>".
+    // The Android client computes real end-to-end latency as:
+    //   e2e_ms = android_receive_ms - (host_us / 1000)
+    // Both devices sync to NTP so clocks agree within ~5 ms, making this a useful
+    // display even though it is not a true round-trip measurement.
+    let mut tick = tokio::time::interval(tokio::time::Duration::from_millis(100));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut ticker_announced = false;
+
+    while connection_alive.load(std::sync::atomic::Ordering::Relaxed)
+        && !restart_requested.load(std::sync::atomic::Ordering::Relaxed)
+    {
+        tokio::select! {
+            result = stdout.read(&mut buf) => {
+                let n = result?;
+                if n == 0 {
+                    break; // ffmpeg exited (encoder unavailable or finished)
+                }
+                if !sent_any {
+                    info!(encoder = %config.encoder, "first H.264 bytes sent to client ({n} bytes)");
+                    if config.encoder == "h264_amf" {
+                        let successful_device = amf_device_from_pre_args(&config.pre_input_args);
+                        if let Some(settings) = amf_settings.clone() {
+                            let maybe_updated = {
+                                let mut write = settings.write().await;
+                                if write.preferred_amf_device != successful_device {
+                                    write.preferred_amf_device = successful_device;
+                                    Some(write.clone())
+                                } else {
+                                    None
+                                }
+                            };
+                            if let Some(updated) = maybe_updated {
+                                let to_save = updated.clone();
+                                tokio::spawn(async move {
+                                    let _ = tokio::task::spawn_blocking(move || {
+                                        save_host_settings_to_disk(&to_save);
+                                    })
+                                    .await;
+                                    info!(
+                                        amf_device = ?updated.preferred_amf_device,
+                                        "persisted AMF device from active stream start"
+                                    );
+                                });
+                            }
+                        }
+                    }
+                }
+                sent_any = true;
+                if ws_tx
+                    .send(Message::binary(buf[..n].to_vec()))
+                    .await
+                    .is_err()
+                {
+                    return Ok(StreamExit::SocketClosed);
+                }
+            }
+            _ = tick.tick() => {
+                let now_us = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_micros();
+                if !ticker_announced {
+                    info!(encoder = %config.encoder, "e2e ticker active (T: frames every 100ms)");
+                    ticker_announced = true;
+                }
+                // Ignore send errors — client may not be listening for text frames.
+                let _ = ws_tx.send(Message::text(format!("T:{now_us}"))).await;
+            }
         }
     }
 
     let _ = child.kill().await;
-    // If the client disconnected (running=false) while a valid encoder was streaming,
-    // return true to prevent pointless fallthrough to the next candidate.
-    Ok(sent_any || !running.load(std::sync::atomic::Ordering::Relaxed))
-}
 
-async fn broadcast(rooms: &Rooms, room: &str, sender: &str, message: &SignalMessage) {
-    let payload = match serde_json::to_string(message) {
-        Ok(v) => v,
-        Err(_) => return,
-    };
-
-    let map = rooms.read().await;
-    if let Some(peers) = map.get(room) {
-        for peer in peers {
-            if peer.id != sender {
-                let _ = peer.tx.send(Message::text(payload.clone()));
-            }
-        }
+    if !connection_alive.load(std::sync::atomic::Ordering::Relaxed) {
+        return Ok(StreamExit::SocketClosed);
+    }
+    if restart_requested.load(std::sync::atomic::Ordering::Relaxed) {
+        return Ok(StreamExit::RestartRequested);
+    }
+    if sent_any {
+        Ok(StreamExit::Streamed)
+    } else {
+        Ok(StreamExit::Unavailable)
     }
 }
 
@@ -677,6 +1262,14 @@ async fn broadcast(rooms: &Rooms, room: &str, sender: &str, message: &SignalMess
 /// 2. A `bin/` subdirectory next to the executable.
 /// 3. Fall back to the name `ffmpeg` and let the OS search PATH.
 fn ffmpeg_exe() -> std::path::PathBuf {
+    // Explicit override for portable/custom deployments.
+    if let Ok(custom) = std::env::var("TABLET_MONITOR_FFMPEG") {
+        let p = std::path::PathBuf::from(custom);
+        if p.exists() {
+            return p;
+        }
+    }
+
     if let Ok(exe) = std::env::current_exe() {
         let name = if cfg!(windows) {
             "ffmpeg.exe"
@@ -694,6 +1287,37 @@ fn ffmpeg_exe() -> std::path::PathBuf {
             }
         }
     }
+
+    // WinGet (Gyan.FFmpeg) common location on Windows user profiles:
+    // %LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*\ffmpeg-*\bin\ffmpeg.exe
+    if cfg!(windows) {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let root = std::path::Path::new(&local_app_data)
+                .join("Microsoft")
+                .join("WinGet")
+                .join("Packages");
+            if let Ok(entries) = std::fs::read_dir(root) {
+                for entry in entries.flatten() {
+                    let package_dir = entry.path();
+                    let Some(name) = package_dir.file_name().and_then(|n| n.to_str()) else {
+                        continue;
+                    };
+                    if !name.starts_with("Gyan.FFmpeg_") {
+                        continue;
+                    }
+                    if let Ok(children) = std::fs::read_dir(&package_dir) {
+                        for child in children.flatten() {
+                            let ffmpeg_bin = child.path().join("bin").join("ffmpeg.exe");
+                            if ffmpeg_bin.exists() {
+                                return ffmpeg_bin;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     std::path::PathBuf::from(if cfg!(windows) {
         "ffmpeg.exe"
     } else {
