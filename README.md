@@ -8,18 +8,17 @@ Ahora soporta dos modos de trabajo:
 
 ## 🚀 Quick Start
 
-**Para instalación y configuración completa, ver [SETUP.md](SETUP.md)**
+**Para instalación y configuración completa, ver [docs/SETUP.md](docs/SETUP.md)**
 
 ```powershell
 # Verificar dependencias
-.\setup.ps1 -Verify
+.\scripts\setup.ps1 -Verify
 
 # Instalar requisitos faltantes
-.\setup.ps1 -Install
+.\scripts\setup.ps1 -Install
 
-# Compilar y ejecutar
-cd host-windows
-cargo run
+# Lanzar (elige USB o WiFi interactivamente)
+.\START.bat
 ```
 
 ## 📋 Requisitos del Sistema
@@ -41,13 +40,34 @@ cargo run
 
 ## 🏗 Estructura del Proyecto
 
-- `host-windows/`: Servidor WebSocket + FFmpeg en Rust
-- `android-client/`: App Android nativa en Kotlin
-- `setup.ps1`: Script automatizado de instalación
-- `requirements.json`: Configuración legible para IA
-- `SETUP.md`: Guía completa de instalación
-- `scripts/`: Scripts de inicio/parada USB
-- `scripts/install-virtual-display.ps1`: Instalación de driver virtual por `INF`
+```
+tablet-second-monitor/
+├── START.bat                    # Entry point único (USB + WiFi)
+├── README.md                    # Documentación principal
+├── LICENSE                      # Licencia
+├── android-client/              # App nativa Android (Kotlin)
+├── host-windows/                # Server Rust + WebSocket
+├── scripts/                      # Scripts de utilidad
+│   ├── launcher.ps1             # Lanzador centralizado (USB/WiFi)
+│   ├── start-usb.ps1 / start-usb.bat
+│   ├── start-wifi.ps1 / start-wifi.bat
+│   ├── build.ps1                # Compilación completa
+│   ├── package.ps1              # Empaquetado de distribución
+│   └── health-check.ps1         # Diagnostics
+├── docs/                        # Documentación y configuración
+│   ├── SETUP.md                 # Guía completa de instalación
+│   ├── CONTRIBUTING.md          # Directrices de contribución
+│   ├── CODE_OF_CONDUCT.md       # Código de conducta
+│   ├── CHANGELOG.md             # Historial de cambios
+│   ├── requirements.json        # Configuración legible
+│   ├── Dockerfile / docker-compose.yml
+│   └── setup.iss                # Instalador Windows
+├── tools/                       # Herramientas especializadas
+│   └── virtual-display/         # Driver de pantalla virtual
+└── .github/                     # CI/CD workflows
+```
+
+**Inicio rápido:** `.\START.bat` (selecciona USB o WiFi interactivamente)
 
 ## ✨ Características
 

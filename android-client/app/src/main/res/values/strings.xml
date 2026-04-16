@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tablet Second Monitor</string>
+    <string name="app_subtitle">Use your tablet as a second PC monitor</string>
+
+    <!-- Connection card -->
+    <string name="section_connection">CONNECTION</string>
+    <string name="label_pc_ip">PC IP Address</string>
+    <string name="hint_pc_ip_desc">127.0.0.1 = USB cable  •  192.168.x.x = Wi-Fi</string>
+    <string name="hint_pc_ip">127.0.0.1</string>
+    <string name="label_display_mode">Display mode</string>
+    <string name="label_monitor_number">Target monitor</string>
+    <string name="hint_monitor_desc">Leave empty for automatic (recommended)</string>
+    <string name="hint_monitor_auto">Auto</string>
+
+    <!-- Display mode spinner -->
+    <string-array name="display_mode_labels">
+        <item>Mirror</item>
+        <item>Extended</item>
+    </string-array>
+
+    <!-- Visual settings card -->
+    <string name="section_visual">VISUAL SETTINGS</string>
+    <string name="label_hud">Performance HUD</string>
+    <string name="label_hud_desc">FPS, latency and bitrate overlay during stream</string>
+
+    <!-- Buttons -->
+    <string name="btn_connect">Connect</string>
+    <string name="btn_disconnect">Disconnect</string>
+    <string name="btn_help">?</string>
+    <string name="btn_language">ES</string>
+
+    <!-- Status messages -->
+    <string name="status_disconnected">Disconnected · Press Connect to start</string>
+    <string name="status_connecting">Connecting (%1$s, %2$s)…</string>
+    <string name="status_reconnecting">Reconnecting (%1$d) in %2$ds…</string>
+    <string name="status_stream_active">Stream active</string>
+    <string name="status_starting_video">Starting H.264 video…</string>
+    <string name="status_reopening_stream">Reopening stream…</string>
+    <string name="status_stream_error">Status: %1$s</string>
+    <string name="status_invalid_ip">Invalid IP. Use 127.0.0.1, localhost, or an IPv4 like 192.168.1.62</string>
+
+    <!-- Log defaults -->
+    <string name="log_default">— log —</string>
+
+    <!-- Help dialog -->
+    <string name="help_title">Help</string>
+    <string name="help_content"><![CDATA[
+<b>How to connect via USB (recommended)</b><br/>
+1. Install ADB on your PC and connect the tablet with a USB cable.<br/>
+2. Run in a terminal on your PC:<br/>
+&nbsp;&nbsp;<tt>adb reverse tcp:9001 tcp:9001</tt><br/>
+3. Start the host app on your PC.<br/>
+4. Leave the IP field as <b>127.0.0.1</b> and press <b>Connect</b>.<br/><br/>
+
+<b>How to connect via Wi-Fi</b><br/>
+1. Make sure your PC and tablet are on the same Wi-Fi network.<br/>
+2. Find your PC\'s local IP: open a terminal and run <tt>ipconfig</tt> (Windows).<br/>
+&nbsp;&nbsp;Look for "IPv4 Address", e.g. <b>192.168.1.50</b>.<br/>
+3. Enter that IP in the IP Address field and press <b>Connect</b>.<br/><br/>
+
+<b>Display modes</b><br/>
+• <b>Mirror</b> – the tablet shows exactly what is on your PC screen.<br/>
+• <b>Extended</b> – the tablet acts as a second independent monitor. Windows sees it as a separate display.<br/><br/>
+
+<b>Target monitor (advanced)</b><br/>
+Only relevant in <b>Extended</b> mode if you have more than two monitors.<br/>
+Leave it empty and the app will choose automatically.<br/>
+If you need a specific one: open Windows Settings → System → Display and note the number shown on each screen (1, 2, 3…). Enter that number here.<br/><br/>
+
+<b>Performance HUD</b><br/>
+Shows FPS, latency and bitrate in the top-right corner while streaming.<br/>
+Toggle it with the switch in this panel before connecting.<br/><br/>
+
+<b>Black screen on Netflix / streaming apps?</b><br/>
+This is normal. Windows protects DRM content (Netflix, Prime, Disney+) from screen capture. There is no workaround — it is a Windows security policy.<br/><br/>
+
+<b>Tip: to stop the stream</b><br/>
+Press the Back button on your tablet.
+    ]]></string>
+
+    <!-- DRM toast -->
+    <string name="drm_notice">Note: DRM content (Netflix, Prime, etc.) may appear black — this is HDCP/Widevine protection by Windows.</string>
+
+    <!-- Connection log messages -->
+    <string name="log_connecting">%1$s: connecting to %2$s in %3$s mode</string>
+    <string name="log_invalid_ip">Invalid IP entered: %1$s</string>
+</resources>

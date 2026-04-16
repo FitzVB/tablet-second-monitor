@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tablet Second Monitor</string>
+    <string name="app_subtitle">Usa tu tablet como segundo monitor para la PC</string>
+
+    <!-- Card de conexión -->
+    <string name="section_connection">CONEXIÓN</string>
+    <string name="label_pc_ip">IP de la PC</string>
+    <string name="hint_pc_ip_desc">127.0.0.1 = cable USB  •  192.168.x.x = Wi-Fi</string>
+    <string name="hint_pc_ip">127.0.0.1</string>
+    <string name="label_display_mode">Modo de pantalla</string>
+    <string name="label_monitor_number">Monitor destino</string>
+    <string name="hint_monitor_desc">Dejar vacío para automático (recomendado)</string>
+    <string name="hint_monitor_auto">Auto</string>
+
+    <!-- Spinner de modo -->
+    <string-array name="display_mode_labels">
+        <item>Espejo</item>
+        <item>Extendido</item>
+    </string-array>
+
+    <!-- Card ajustes visuales -->
+    <string name="section_visual">AJUSTES VISUALES</string>
+    <string name="label_hud">HUD de rendimiento</string>
+    <string name="label_hud_desc">FPS, latencia y bitrate durante el stream</string>
+
+    <!-- Botones -->
+    <string name="btn_connect">Conectar</string>
+    <string name="btn_disconnect">Desconectar</string>
+    <string name="btn_help">?</string>
+    <string name="btn_language">EN</string>
+
+    <!-- Mensajes de estado -->
+    <string name="status_disconnected">Desconectado · Presiona Conectar para comenzar</string>
+    <string name="status_connecting">Conectando (%1$s, %2$s)…</string>
+    <string name="status_reconnecting">Reconectando (%1$d) en %2$ds…</string>
+    <string name="status_stream_active">Stream activo</string>
+    <string name="status_starting_video">Iniciando video H.264…</string>
+    <string name="status_reopening_stream">Reabriendo stream…</string>
+    <string name="status_stream_error">Estado: %1$s</string>
+    <string name="status_invalid_ip">IP invalida. Usa 127.0.0.1, localhost o una IPv4 como 192.168.1.62</string>
+
+    <!-- Log -->
+    <string name="log_default">— log —</string>
+
+    <!-- Diálogo de ayuda -->
+    <string name="help_title">Ayuda</string>
+    <string name="help_content"><![CDATA[
+<b>Cómo conectar por cable USB (recomendado)</b><br/>
+1. Instala ADB en tu PC y conecta el tablet con un cable USB.<br/>
+2. Ejecuta en una terminal de la PC:<br/>
+&nbsp;&nbsp;<tt>adb reverse tcp:9001 tcp:9001</tt><br/>
+3. Abre el programa host en tu PC.<br/>
+4. Deja la IP como <b>127.0.0.1</b> y presiona <b>Conectar</b>.<br/><br/>
+
+<b>Cómo conectar por Wi-Fi</b><br/>
+1. Asegúrate que tu PC y el tablet estén en la misma red Wi-Fi.<br/>
+2. Busca la IP local de tu PC: abre una terminal y escribe <tt>ipconfig</tt>.<br/>
+&nbsp;&nbsp;Busca "Dirección IPv4", por ejemplo <b>192.168.1.50</b>.<br/>
+3. Escribe esa IP en el campo de dirección y presiona <b>Conectar</b>.<br/><br/>
+
+<b>Modos de pantalla</b><br/>
+• <b>Espejo</b> – el tablet muestra exactamente lo mismo que la pantalla del PC.<br/>
+• <b>Extendido</b> – el tablet funciona como un segundo monitor independiente. Windows lo ve como una pantalla aparte.<br/><br/>
+
+<b>Monitor destino (avanzado)</b><br/>
+Solo es relevante en modo <b>Extendido</b> si tienes más de dos monitores.<br/>
+Déjalo vacío y la app lo elegirá automáticamente.<br/>
+Si necesitas uno específico: abre Configuración de Windows → Sistema → Pantalla y fíjate en el número que aparece en cada pantalla (1, 2, 3…). Pon ese número aquí.<br/><br/>
+
+<b>HUD de rendimiento</b><br/>
+Muestra en la esquina superior derecha el FPS, la latencia y el bitrate mientras transmites.<br/>
+Actívalo o desactívalo con el interruptor de este panel antes de conectar.<br/><br/>
+
+<b>¿Pantalla negra en Netflix / apps de streaming?</b><br/>
+Esto es normal. Windows protege el contenido DRM (Netflix, Prime, Disney+) para que no pueda capturarse. No tiene solución; es una restricción de seguridad de Windows.<br/><br/>
+
+<b>Consejo: para detener el stream</b><br/>
+Presiona el botón Atrás en tu tablet.
+    ]]></string>
+
+    <!-- Toast DRM -->
+    <string name="drm_notice">Aviso: el contenido DRM (Netflix, Prime, etc.) puede verse en negro — es protección HDCP/Widevine de Windows.</string>
+
+    <!-- Mensajes de log -->
+    <string name="log_connecting">%1$s: conectando a %2$s en modo %3$s</string>
+    <string name="log_invalid_ip">IP invalida ingresada: %1$s</string>
+</resources>
