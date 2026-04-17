@@ -90,6 +90,12 @@ jobs:
           distribution: 'temurin'
           cache: gradle
       
-      - name: Run detekt analysis
-        run: cd android-client && ./gradlew detekt --info
+      - name: Run static analysis
+        run: |
+          cd android-client
+          if ./gradlew tasks --all | grep -q '^detekt\b'; then
+            ./gradlew detekt --info
+          else
+            ./gradlew lint --info
+          fi
         continue-on-error: true
