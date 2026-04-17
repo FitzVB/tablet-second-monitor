@@ -1,91 +1,91 @@
 # Contributing to Tablet Second Monitor
 
-¡Gracias por la intención de contribuir! Este documento explica cómo hacerlo.
+Thanks for your interest in contributing. This document explains how.
 
-## Código de Conducta
+## Code of Conduct
 
-Esperamos que todos los contribuyentes sigan nuestro código de conducta: sé respetuoso, inclusivo y profesional.
+We expect all contributors to follow our code of conduct: be respectful, inclusive, and professional.
 
-## ¿Cómo Contribuir?
+## How to Contribute
 
-### Reportar Bugs
+### Report Bugs
 
-1. **Verifica si ya existe** un issue similar en la sección "Issues"
-2. **Crea un nuevo issue** con título descriptivo
-3. **Incluye**:
-   - SO (Windows 10/11, versión)
+1. **Check first** if a similar issue already exists in "Issues"
+2. **Open a new issue** with a descriptive title
+3. **Include**:
+    - OS (Windows 10/11, version)
    - Versión de Rust (`rustc --version`)
-   - Paso a paso para reproducir
-   - Error exacto (stack trace si aplica)
-   - Evidencia (logs, screenshots)
+    - Step-by-step reproduction
+    - Exact error (stack trace if available)
+    - Evidence (logs, screenshots)
 
-Ejemplo:
+Example:
 ```
 Título: H.264 stream fails on Intel iGPU
 
-Descripción:
+Description:
 - Windows 11 22H2
 - Rust 1.78.0
 - Intel UHD Graphics 770
 
-Pasos:
+Steps:
 1. cargo run
 2. adb shell am start -n com.example.tabletmonitor/.MainActivity
-3. Pulsa Conectar
+3. Tap Connect
 
 Error:
 ERROR: h264_qsv encoder not found, falling back to libx264
 ```
 
-### Sugerir Features
+### Suggest Features
 
-1. **Abre un Discussion** en lugar de Issue
-2. **Describe**: Use case, por qué lo necesitas, alternativas consideradas
-3. **Etiqueta**: enhancement
+1. **Open a Discussion** instead of an Issue
+2. **Describe**: use case, why you need it, alternatives considered
+3. **Tag**: enhancement
 
 ### Pull Requests
 
-#### Antes de empezar:
+#### Before you start:
 
 1. **Fork** el repositorio
-2. **Crea branch** con nombre descriptivo:
+2. **Create a branch** with a descriptive name:
    ```bash
    git checkout -b feature/add-bitrate-limiter
    git checkout -b fix/websocket-reconnection
    ```
 
-#### Workflow de cambios:
+#### Change workflow:
 
 ```bash
-# Clone tu fork
+# Clone your fork
 git clone https://github.com/YOUR_USERNAME/tablet-second-monitor.git
 cd tablet-second-monitor
 
-# Crea branch
+# Create branch
 git checkout -b feature/your-feature
 
-# Haz cambios
+# Make changes
 # Rust: host-windows/src/
 # Android: android-client/app/src/main/
 
-# Compile y prueba
+# Build and test
 cd host-windows && cargo build && cargo test
 cd ../android-client && ./gradlew assembleDebug
 
-# Commit con mensaje descriptivo
+# Commit with descriptive message
 git commit -m "Add feature: description"
 git commit -m "Fix: issue description"
 git commit -m "Docs: update README.md"
 
-# Push a tu fork
+# Push to your fork
 git push origin feature/your-feature
 
-# Abre Pull Request
+# Open pull request
 ```
 
-#### Mensajes de Commit:
+#### Commit messages:
 
-Usa conventional commits:
+Use conventional commits:
 ```
 feat: add H.264 bitrate adaptive streaming
 fix: resolve WebSocket timeout on reconnect
@@ -95,33 +95,33 @@ chore: update dependencies
 perf: optimize GDI capture resolution
 ```
 
-#### Checklist para PR:
+#### PR checklist:
 
 - [ ] El código compila sin warnings (`cargo build --all`)
 - [ ] Tests pasan (`cargo test`)
 - [ ] Android APK compila (`./gradlew assembleDebug`)
-- [ ] Se probó en dispositivo(s) Android
-- [ ] Se agregaron tests si es feature nuevo
-- [ ] Se actualizó documentación
-- [ ] Se agregó CHANGELOG.md entry
-- [ ] No hay conflictos con master
+- [ ] Tested on Android device(s)
+- [ ] Added tests for new features when needed
+- [ ] Updated documentation
+- [ ] Added CHANGELOG.md entry
+- [ ] No conflicts with master
 
-#### Criterios de revisión:
+#### Review criteria:
 
-✅ **Será aprobado si**:
-- Código es legible y bien documentado
-- Cumple con estilo del proyecto
-- No introduce regresiones
-- Tiene tests (si aplica)
-- Documentación está actualizada
+✅ **Will be approved if**:
+- Code is readable and well documented
+- Follows project style
+- Does not introduce regressions
+- Includes tests when applicable
+- Documentation is updated
 
-❌ **No será aprobado si**:
-- Tiene conflictos no resueltos
-- No compila sin warnings
-- No se probó funcionalmente
-- Cambia arbitrariamente estilos sin razón
+❌ **Will not be approved if**:
+- Contains unresolved conflicts
+- Does not build without warnings
+- Was not functionally tested
+- Changes style arbitrarily without reason
 
-## Guías de Desarrollo
+## Development Guidelines
 
 ### Estilo de Código Rust
 
@@ -138,12 +138,12 @@ fn encodeH264Frame(buffer: &[u8], encoder: &FFmpegEncoder) -> Result<Vec<u8>> {
 }
 ```
 
-**Reglas**:
-- Snake_case para funciones y variables
-- CamelCase para tipos
-- Imports ordenados: std → external → local
-- 100 caracteres max de línea (preferiblemente)
-- `cargo fmt` antes de commit
+**Rules**:
+- snake_case for functions and variables
+- CamelCase for types
+- Ordered imports: std -> external -> local
+- 100 chars max per line (preferred)
+- Run `cargo fmt` before commit
 
 ### Estilo Android Kotlin
 
@@ -163,10 +163,10 @@ class h264decoder(surface: Surface) {
 }
 ```
 
-**Reglas**:
-- PascalCase para clases
-- camelCase para funciones
-- `ktlint` para formateo automático
+**Rules**:
+- PascalCase for classes
+- camelCase for functions
+- `ktlint` for automatic formatting
 - Nullable types con `?` (use `?:` operator)
 
 ### Comentarios y Documentación
@@ -207,61 +207,61 @@ Rust:
 ```bash
 cargo test
 cargo test --release
-cargo test -- --nocapture  # Ver output
+cargo test -- --nocapture  # Show output
 ```
 
 Android:
 ```bash
 ./gradlew test
-./gradlew connectedAndroidTest  # En dispositivo
+./gradlew connectedAndroidTest  # On device
 ```
 
-## Configuración Local
+## Local Setup
 
 ```powershell
-# Setup completo
+# Full setup
 .\setup.ps1 -Full
 
-# IDE recomendados:
+# Recommended IDEs:
 # - IntelliJ IDEA Community (Android)
 # - VS Code + rust-analyzer (Rust)
 
-# Extensions recomendadas:
+# Recommended extensions:
 # - rust-analyzer
 # - Kotlin Language
 # - Android Resources
 ```
 
-## Flujo de Desarrollo Típico
+## Typical Development Flow
 
 ```powershell
-# Terminal 1: Monitor host
+# Terminal 1: Host monitor
 cd host-windows
 cargo watch -x run
 
-# Terminal 2: Monitor Android logs
+# Terminal 2: Android logs
 adb logcat -s "TabletMonitor"
 
-# Terminal 3: Build y deploy
+# Terminal 3: Build and deploy
 cd android-client
 ./gradlew assemble
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-## Areas de Contribución Necesitadas
+## Needed Contribution Areas
 
 - [ ] **Streaming**: Audio support, RTMP/RTSP transport
 - [ ] **Performance**: Motion detection, adaptive bitrate
-- [ ] **Seguridad**: Certificate pinning, OAuth auth
+- [ ] **Security**: Certificate pinning, OAuth auth
 - [ ] **UI**: Dark mode, settings persistence
 - [ ] **Docs**: Tutorial videos, architecture diagrams
 - [ ] **Testing**: Unit tests, integration tests
 - [ ] **Platforms**: Support Linux/macOS host
 
-## Preguntas?
+## Questions?
 
 - 💬 GitHub Discussions
 - 🐛 GitHub Issues
 - 📧 Pull Request description
 
-¡Gracias por contribuir! 🙏
+Thanks for contributing.

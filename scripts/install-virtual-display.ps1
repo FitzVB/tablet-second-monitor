@@ -24,37 +24,37 @@ function Resolve-InfPath {
         return $candidate.FullName
     }
 
-    throw "No se encontro ningun .inf. Coloca el driver en drivers\\virtual-display o pasa -InfPath."
+    throw "No .inf was found. Place the driver under drivers\\virtual-display or pass -InfPath."
 }
 
 if ($Provider -eq "winget") {
     if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
-        throw "winget.exe no esta disponible. Usa -Provider inf o instala App Installer."
+        throw "winget.exe is not available. Use -Provider inf or install App Installer."
     }
 
-    Write-Host "Instalando Virtual Display Driver desde winget..." -ForegroundColor Cyan
+    Write-Host "Installing Virtual Display Driver from winget..." -ForegroundColor Cyan
     winget install --id VirtualDrivers.Virtual-Display-Driver -e --accept-package-agreements --accept-source-agreements
 
     if ($LASTEXITCODE -ne 0) {
         throw "winget devolvio codigo $LASTEXITCODE"
     }
 
-    Write-Host "Driver virtual instalado desde winget." -ForegroundColor Green
+    Write-Host "Virtual driver installed from winget." -ForegroundColor Green
     return
 }
 
 if (-not (Get-Command pnputil.exe -ErrorAction SilentlyContinue)) {
-    throw "pnputil.exe no esta disponible en este sistema."
+    throw "pnputil.exe is not available on this system."
 }
 
 $resolvedInf = Resolve-InfPath -ExplicitPath $InfPath
-Write-Host "Instalando driver virtual desde: $resolvedInf" -ForegroundColor Cyan
+Write-Host "Installing virtual driver from: $resolvedInf" -ForegroundColor Cyan
 
 pnputil.exe /add-driver "$resolvedInf" /install
 
 if ($LASTEXITCODE -ne 0) {
-    throw "pnputil devolvio codigo $LASTEXITCODE"
+    throw "pnputil returned exit code $LASTEXITCODE"
 }
 
-Write-Host "Driver instalado. Si Windows no muestra el nuevo monitor, reconecta el dispositivo o reinicia." -ForegroundColor Green
-Write-Host "Luego usa el modo extended y deja el display en Auto, o fija TABLET_MONITOR_EXTENDED_DISPLAY." -ForegroundColor Green
+Write-Host "Driver installed. If Windows does not show the new monitor, reconnect the device or reboot." -ForegroundColor Green
+Write-Host "Then use extended mode and leave display on Auto, or set TABLET_MONITOR_EXTENDED_DISPLAY." -ForegroundColor Green

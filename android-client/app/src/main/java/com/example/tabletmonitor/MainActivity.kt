@@ -1,18 +1,25 @@
-package com.example.tabletmonitor
+﻿package com.example.tabletmonitor
 
+import android.content.Context
 import android.content.res.Configuration
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.graphics.Color
-import android.graphics.SurfaceTexture
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.Surface
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.text.Html
+import android.widget.CompoundButton
 import android.widget.FrameLayout
 import android.view.WindowManager
 import android.widget.Button
@@ -20,16 +27,22 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
@@ -37,15 +50,17 @@ class MainActivity : AppCompatActivity() {
     companion object {
         // USB profile: balance image quality with low interaction latency on CPU fallback.
         private const val STREAM_TARGET_FPS = 60
-        private const val STREAM_TARGET_BITRATE_KBPS = 12000
-        private const val MAX_STREAM_WIDTH = 1600.0
-        private const val MAX_STREAM_HEIGHT = 900.0
+        private const val STREAM_TARGET_BITRATE_KBPS = 10000
+        private const val MAX_STREAM_WIDTH = 1280.0
+        private const val MAX_STREAM_HEIGHT = 720.0
         // Decoder tolerance: host can now be controlled from PC with fixed presets up to 1080p.
         // Configure MediaCodec with a stable max size so hot profile changes don't black-screen
         // when host resolution differs from the initial client-requested size.
         private const val DECODER_MAX_WIDTH = 1920
         private const val DECODER_MAX_HEIGHT = 1080
         private const val INPUT_MOVE_SEND_INTERVAL_MS = 8L
+        private const val PREFS_NAME = "tablet_monitor_prefs"
+        private const val PREF_LANGUAGE = "app_language"
     }
 
     private var streamSocket: WebSocket? = null
@@ -55,13 +70,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var displayInput: EditText
     private lateinit var modeSpinner: Spinner
     private lateinit var connectButton: Button
+    private lateinit var helpButton: Button
+    private lateinit var languageButton: Button
+    private lateinit var menuButton: Button
     private lateinit var statusText: TextView
     private lateinit var logText: TextView
     private lateinit var topPanel: LinearLayout
-    private lateinit var streamSurface: TextureView
+    private lateinit var streamSurface: SurfaceView
     private lateinit var streamContainer: FrameLayout
     private lateinit var hudText: TextView
+    private lateinit var hudToggle: Switch
     private lateinit var logScroll: ScrollView
+    private var hudEnabled = true
 
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private var reconnectAttempts = 0
@@ -78,9 +98,16 @@ class MainActivity : AppCompatActivity() {
     // Input RTT: round-trip time of the input WebSocket channel measured via ping/pong.
     // Written from OkHttp thread, read from main thread — @Volatile is sufficient.
     @Volatile private var inputRttMs = -1L
-    @Volatile private var activeStreamProfile = "perfil: pendiente"
+    @Volatile private var activeStreamProfile = ""
     @Volatile private var streamRestartRequested = false
 
+    // Dimensions used to configure the active decoder (set from requestedW/H in startH264Stream).
+    private var decoderTargetW = DECODER_MAX_WIDTH
+    private var decoderTargetH = DECODER_MAX_HEIGHT
+    // Last picture/buffer dimensions received from INFO_OUTPUT_FORMAT_CHANGED.
+    private var lastPicW = 0; private var lastPicH = 0
+    private var lastBufW = 0; private var lastBufH = 0
+    private var lastCropL = 0; private var lastCropT = 0
     // Sends a ping every 2 s to measure input round-trip time.
     private val inputPingRunnable = object : Runnable {
         override fun run() {
@@ -112,7 +139,7 @@ class MainActivity : AppCompatActivity() {
             // Before first frame, ffmpeg may still be probing encoders/fallbacks.
             val isStalled = connected && streamSocket != null && !pendingStreamStart && hasReceivedVideoChunk && last > 0L && (now - last) > 2500L
             if (isStalled) {
-                appendLog("Stream congelado detectado (>2.5s sin video), reconectando...")
+                appendLog("Detected frozen stream (>2.5s without video), reconnecting...")
                 // Throttle repeated triggers while close handshake completes.
                 lastVideoChunkAtMs = now
                 hasReceivedVideoChunk = false
@@ -141,6 +168,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        applyLanguage(selectedLanguageCode())
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
@@ -149,28 +177,42 @@ class MainActivity : AppCompatActivity() {
         displayInput = findViewById(R.id.displayInput)
         modeSpinner = findViewById(R.id.modeSpinner)
         connectButton = findViewById(R.id.connectButton)
+        helpButton = findViewById(R.id.helpButton)
+        languageButton = findViewById(R.id.languageButton)
+        menuButton = findViewById(R.id.menuButton)
         statusText = findViewById(R.id.statusText)
         logText = findViewById(R.id.logText)
         topPanel = findViewById(R.id.topPanel)
         streamSurface = findViewById(R.id.streamSurface)
         streamContainer = findViewById(R.id.streamContainer)
         hudText = findViewById(R.id.hudText)
+        hudToggle = findViewById(R.id.hudToggle)
         logScroll = findViewById(R.id.logScroll)
+        activeStreamProfile = getString(R.string.profile_pending)
 
-        streamSurface.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
-                decoderSurface?.release()
-                decoderSurface = Surface(surfaceTexture)
+        helpButton.setOnClickListener { showFaqDialog() }
+        languageButton.setOnClickListener { toggleLanguage() }
+        menuButton.setOnClickListener { showQuickMenu() }
+        hudToggle.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
+            hudEnabled = checked
+            hudText.visibility = if (checked && connected) View.VISIBLE else View.GONE
+        }
+
+        updateLanguageButtonLabel()
+
+        streamSurface.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                decoderSurface = holder.surface
                 surfaceReady = true
-                maybeStartPendingStream("Surface lista, iniciando video H.264...")
+                maybeStartPendingStream("Surface ready, starting H.264 video...")
             }
 
-            override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {}
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                if (lastPicW > 0) applyVideoTransform()
+            }
 
-            override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
                 surfaceReady = false
-                // If still logically connected, keep pendingStreamStart so surfaceCreated
-                // will restart the stream (e.g. on screen rotation).
                 if (connected) pendingStreamStart = true
                 streamSocket?.close(1000, "surface destroyed")
                 streamSocket = null
@@ -178,17 +220,13 @@ class MainActivity : AppCompatActivity() {
                 inputSocket = null
                 decoder?.release()
                 decoder = null
-                decoderSurface?.release()
                 decoderSurface = null
-                return true
             }
+        })
 
-            override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {}
-        }
-
-        // If TextureView was already available before listener registration,
-        // bind the surface immediately to avoid getting stuck waiting forever.
-        ensureTextureSurfaceReady()
+        // If SurfaceView was already created before callback registration,
+        // bind it immediately to avoid getting stuck waiting forever.
+        ensureSurfaceReady()
 
         streamSurface.setOnTouchListener { _, event ->
             if (!connected) {
@@ -208,9 +246,9 @@ class MainActivity : AppCompatActivity() {
                     val displayMode = normalizedDisplayMode()
                     reconnectAttempts = 0
                     connected = true
-                    statusText.text = "Estado: conectando ($mode, $displayMode)..."
-                    connectButton.text = "Disconnect"
-                    appendLog("$mode: conectando a $ip en modo $displayMode")
+                    statusText.text = getString(R.string.status_connecting, mode, displayMode)
+                    connectButton.text = getString(R.string.btn_disconnect)
+                    appendLog("$mode: connecting to $ip in $displayMode mode")
                     startH264Stream()
                 } else {
                     stopAll()
@@ -227,18 +265,19 @@ class MainActivity : AppCompatActivity() {
         streamContainer.visibility = View.VISIBLE
         logScroll.visibility = View.GONE
         topPanel.visibility = View.GONE
+        hudText.visibility = if (hudEnabled) View.VISIBLE else View.GONE
         setImmersiveMode(true)
 
-        // Re-check now that container is visible; on some devices TextureView becomes
+        // Re-check now that container is visible; on some devices SurfaceView becomes
         // available only after this layout pass.
-        ensureTextureSurfaceReady()
+        ensureSurfaceReady()
 
         if (!surfaceReady) {
             pendingStreamStart = true
-            appendLog("Surface no lista todavia, esperando...")
+            appendLog("Surface not ready yet, waiting...")
             streamSurface.post {
-                if (ensureTextureSurfaceReady()) {
-                    maybeStartPendingStream("Surface lista tras layout, iniciando video H.264...")
+                if (ensureSurfaceReady()) {
+                    maybeStartPendingStream("Surface ready after layout, starting H.264 video...")
                 }
             }
             return
@@ -269,16 +308,24 @@ class MainActivity : AppCompatActivity() {
         val surface = decoderSurface
         if (surface == null) {
             pendingStreamStart = true
-            appendLog("Surface de textura no disponible, reintentando...")
+            appendLog("Texture surface unavailable, retrying...")
             return
         }
+
+        // Configure decoder at the exact stream dimensions so the buffer has no extra padding.
+        // This eliminates the "top-left corner only" issue caused by a 1920x1088 buffer for a
+        // 1280x720 stream being stretched to fill the view.
+        decoderTargetW = targetW
+        decoderTargetH = targetH
+        lastPicW = 0; lastPicH = 0; lastBufW = 0; lastBufH = 0; lastCropL = 0; lastCropT = 0
 
         synchronized(decoderLock) {
             decoder?.release()
             decoder = createDecoder(surface)
         }
 
-        val streamUrl = "$baseUrl/h264?w=$targetW&h=$targetH&fps=$STREAM_TARGET_FPS&bitrate_kbps=$STREAM_TARGET_BITRATE_KBPS&fit=cover&mode=$displayMode$displayQuery"
+        val fitMode = if (displayMode == "mirror") "contain" else "cover"
+        val streamUrl = "$baseUrl/h264?w=$targetW&h=$targetH&fps=$STREAM_TARGET_FPS&bitrate_kbps=$STREAM_TARGET_BITRATE_KBPS&fit=$fitMode&mode=$displayMode$displayQuery"
         val request = Request.Builder().url(streamUrl).build()
 
         reconnectHandler.removeCallbacks(streamStallWatchdog)
@@ -294,8 +341,8 @@ class MainActivity : AppCompatActivity() {
                 reconnectAttempts = 0
                 hasReceivedVideoChunk = false
                 lastVideoChunkAtMs = SystemClock.elapsedRealtime()
-                activeStreamProfile = "perfil: esperando cfg del host"
-                runOnUiThread { statusText.text = "Estado: video H.264 activo" }
+                activeStreamProfile = getString(R.string.profile_waiting_host_cfg)
+                runOnUiThread { statusText.text = getString(R.string.status_stream_active) }
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -323,7 +370,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (text.startsWith("CFG:")) {
-                    val newProfile = "perfil host: " + text.removePrefix("CFG:")
+                    val newProfile = "host profile: " + text.removePrefix("CFG:")
                     val changed = newProfile != activeStreamProfile
                     activeStreamProfile = newProfile
                     if (changed) {
@@ -334,7 +381,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (text == "RESET") {
                     if (connected) {
-                        requestStreamReconnect("reinicio de stream en host")
+                        requestStreamReconnect("host requested stream restart")
                     }
                     return
                 }
@@ -345,10 +392,10 @@ class MainActivity : AppCompatActivity() {
                     null
                 }
                 if (msgObj?.optString("type") == "error") {
-                    val msg = msgObj.optString("message", "error de stream")
+                    val msg = msgObj.optString("message", "stream error")
                     runOnUiThread {
                         appendLog("STREAM ERROR: $msg")
-                        statusText.text = "Estado: $msg"
+                        statusText.text = getString(R.string.status_stream_error, msg)
                         if (msg.contains("No H.264 encoder available")) {
                             // Keep the session alive and retry automatically so profile
                             // hot-apply does not force the user to go back to Connect.
@@ -379,7 +426,7 @@ class MainActivity : AppCompatActivity() {
                         stopVisualStreamingState()
                     } else if (!pendingStreamStart) {
                         // Unexpected close (not from surface destroy/orientation change)
-                        appendLog("Stream cerrado: $reason")
+                        appendLog("Stream closed: $reason")
                         scheduleReconnect()
                     }
                     // If pendingStreamStart, surfaceCreated will call maybeStartPendingStream
@@ -394,7 +441,7 @@ class MainActivity : AppCompatActivity() {
         }
         runOnUiThread {
             appendLog(logMessage)
-            statusText.text = "Estado: iniciando video H.264..."
+            statusText.text = getString(R.string.status_starting_video)
         }
         startH264Stream()
     }
@@ -419,37 +466,47 @@ class MainActivity : AppCompatActivity() {
         reconnectHandler.removeCallbacks(inputPingRunnable)
         hasReceivedVideoChunk = false
         lastVideoChunkAtMs = 0L
-        streamSocket?.close(1000, "desconectado por usuario")
+        streamSocket?.close(1000, "disconnected by user")
         streamSocket = null
-        inputSocket?.close(1000, "desconectado por usuario")
+        inputSocket?.close(1000, "disconnected by user")
         inputSocket = null
         pendingStreamStart = false
         synchronized(decoderLock) {
             decoder?.release()
             decoder = null
         }
-        decoderSurface?.release()
         decoderSurface = null
         connected = false
         runOnUiThread {
             stopVisualStreamingState()
-            statusText.text = "Estado: desconectado"
-            connectButton.text = "Connect"
+            statusText.text = getString(R.string.status_disconnected)
+            connectButton.text = getString(R.string.btn_connect)
         }
     }
 
     private fun setImmersiveMode(enabled: Boolean) {
-        @Suppress("DEPRECATION")
-        if (enabled) {
-            window.decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                    View.SYSTEM_UI_FLAG_FULLSCREEN or
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(!enabled)
+            val controller = window.insetsController
+            if (enabled) {
+                controller?.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                controller?.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controller?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+            }
         } else {
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            @Suppress("DEPRECATION")
+            if (enabled) {
+                window.decorView.systemUiVisibility =
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                        View.SYSTEM_UI_FLAG_FULLSCREEN or
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            } else {
+                window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            }
         }
     }
 
@@ -473,8 +530,8 @@ class MainActivity : AppCompatActivity() {
         // Exponential backoff: 1s, 2s, 4s, 8s … capped at 30s
         val delayMs = minOf(1000L shl reconnectAttempts.coerceAtMost(4), 30_000L)
         reconnectAttempts++
-        statusText.text = "Estado: reconectando (${reconnectAttempts}) en ${delayMs/1000}s..."
-        appendLog("Reconectando en ${delayMs}ms (intento $reconnectAttempts)")
+        statusText.text = getString(R.string.status_reconnecting, reconnectAttempts, delayMs / 1000)
+        appendLog("Reconnecting in ${delayMs}ms (attempt $reconnectAttempts)")
         reconnectHandler.postDelayed(streamReconnectRunnable, delayMs)
     }
 
@@ -504,7 +561,7 @@ class MainActivity : AppCompatActivity() {
     private fun formatSocketFailure(channel: String, host: String, t: Throwable): String {
         val simple = t.javaClass.simpleName
         return if (simple == "ConnectException" && isUsbLoopbackHost(host)) {
-            "$channel error: ConnectException (falta adb reverse tcp:9001 tcp:9001 o el host no esta abierto)"
+            "$channel error: ConnectException (missing adb reverse tcp:9001 tcp:9001 or host is not running)"
         } else {
             "$channel error: ${t.message ?: simple}"
         }
@@ -522,7 +579,7 @@ class MainActivity : AppCompatActivity() {
         inputSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 runOnUiThread {
-                    appendLog("Canal de input activo")
+                    appendLog("Input channel active")
                     reconnectHandler.removeCallbacks(inputPingRunnable)
                     reconnectHandler.postDelayed(inputPingRunnable, 500L)
                 }
@@ -551,10 +608,10 @@ class MainActivity : AppCompatActivity() {
                         reconnectHandler.postDelayed({
                             if (connected && inputSocket == null) {
                                 val ip = currentServerHost()
-                                val displayMode = normalizedDisplayMode()
-                                val displayQuery = displayInput.text.toString().trim()
+                                val mode = normalizedDisplayMode()
+                                val query = displayInput.text.toString().trim()
                                     .toIntOrNull()?.coerceIn(0, 9)?.let { "&display=$it" } ?: ""
-                                ensureInputSocket("ws://$ip:9001", displayMode, displayQuery)
+                                ensureInputSocket("ws://$ip:9001", mode, query)
                             }
                         }, 3000L)
                     }
@@ -563,7 +620,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 runOnUiThread {
-                    appendLog("Input cerrado: $reason")
+                    appendLog("Input closed: $reason")
                     inputSocket = null
                 }
             }
@@ -617,17 +674,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearStreamSurface() {
-        // TextureView does not support background drawables on some devices.
+        // Keep the parent container black so letterbox bars are clean and consistent.
         // Paint the parent container instead to keep a black backdrop safely.
         streamContainer.setBackgroundColor(Color.BLACK)
+        // Reset SurfaceView to fill the container so the next connection starts fresh.
+        val params = streamSurface.layoutParams as FrameLayout.LayoutParams
+        params.width  = FrameLayout.LayoutParams.MATCH_PARENT
+        params.height = FrameLayout.LayoutParams.MATCH_PARENT
+        params.leftMargin = 0
+        params.topMargin = 0
+        params.rightMargin = 0
+        params.bottomMargin = 0
+        streamSurface.layoutParams = params
+        streamSurface.x = 0f
+        streamSurface.y = 0f
     }
 
-    private fun ensureTextureSurfaceReady(): Boolean {
-        val st = streamSurface.surfaceTexture
-        if (st != null && streamSurface.isAvailable) {
-            if (decoderSurface == null) {
-                decoderSurface = Surface(st)
-            }
+    private fun ensureSurfaceReady(): Boolean {
+        val surface = streamSurface.holder.surface
+        if (surface != null && surface.isValid) {
+            decoderSurface = surface
             surfaceReady = true
             return true
         }
@@ -636,26 +702,238 @@ class MainActivity : AppCompatActivity() {
 
     private fun normalizedDisplayMode(): String {
         val raw = modeSpinner.selectedItem?.toString()?.trim()?.lowercase() ?: "mirror"
-        return if (raw == "extended") "extended" else "mirror"
+        return if (raw == "extended" || raw == "extendido") "extended" else "mirror"
+    }
+
+    /**
+     * Applies a letterbox/pillarbox transform so the decoded video picture fills the view
+     * correctly regardless of the hardware decoder's internal buffer padding.
+     *
+     * Must be called on the main thread after both (a) the view has been laid out
+     * (streamSurface.width > 0) and (b) FORMAT_CHANGED has fired (lastPicW > 0).
+     * Uses lastBufW/H, lastPicW/H, lastCropL/T stored when FORMAT_CHANGED arrived.
+     *
+     * Falls back to decoderTargetW/H when the decoder hasn't reported dimensions yet.
+     */
+    private fun applyVideoTransform() {
+        if (!surfaceReady) return
+
+        val viewW = streamContainer.width
+        val viewH = streamContainer.height
+        val srcW = lastPicW.takeIf { it > 0 } ?: decoderTargetW
+        val srcH = lastPicH.takeIf { it > 0 } ?: decoderTargetH
+
+        if (viewW <= 0 || viewH <= 0 || srcW <= 0 || srcH <= 0) {
+            // Fallback before first layout/format: fill parent to avoid blank view.
+            val fallback = streamSurface.layoutParams as FrameLayout.LayoutParams
+            fallback.width = FrameLayout.LayoutParams.MATCH_PARENT
+            fallback.height = FrameLayout.LayoutParams.MATCH_PARENT
+            fallback.gravity = Gravity.CENTER
+            fallback.leftMargin = 0
+            fallback.topMargin = 0
+            fallback.rightMargin = 0
+            fallback.bottomMargin = 0
+            streamSurface.layoutParams = fallback
+            streamSurface.x = 0f
+            streamSurface.y = 0f
+            return
+        }
+
+        // Keep aspect ratio in the client (contain): no stretch.
+        val scale = minOf(viewW.toFloat() / srcW.toFloat(), viewH.toFloat() / srcH.toFloat())
+        val dstW = (srcW * scale).toInt().coerceAtLeast(1)
+        val dstH = (srcH * scale).toInt().coerceAtLeast(1)
+
+        val params = streamSurface.layoutParams as FrameLayout.LayoutParams
+        params.width = dstW
+        params.height = dstH
+        params.gravity = Gravity.CENTER
+        params.leftMargin = 0
+        params.topMargin = 0
+        params.rightMargin = 0
+        params.bottomMargin = 0
+        streamSurface.layoutParams = params
+        // SurfaceView can ignore gravity on some vendor implementations when x/y were
+        // previously forced to 0. Center it explicitly so letterbox bars are symmetric.
+        streamSurface.x = ((viewW - dstW) / 2f).coerceAtLeast(0f)
+        streamSurface.y = ((viewH - dstH) / 2f).coerceAtLeast(0f)
+
+        android.util.Log.i(
+            "VideoTransform",
+            "surface=match_parent mode=${normalizedDisplayMode()} pic=${lastPicW}x${lastPicH} target=${decoderTargetW}x${decoderTargetH}"
+        )
     }
 
     private fun createDecoder(surface: Surface): H264Decoder {
-        return H264Decoder(surface, DECODER_MAX_WIDTH, DECODER_MAX_HEIGHT) { fps, latencyMs, outW, outH, rxKbps ->
+        return H264Decoder(surface, DECODER_MAX_WIDTH, DECODER_MAX_HEIGHT) { fps, latencyMs, bufW, bufH, picW, picH, cropL, cropT, rxKbps ->
             runOnUiThread {
                 val e2e = emaE2eMs.toLong()
                 val rtt = inputRttMs
                 val rttStr = if (rtt >= 0L) "  •  ${rtt}ms rtt" else ""
                 val videoLine = if (e2e in 1L..5000L)
-                    "%.0f fps  •  %dms dec  •  %dms e2e$rttStr".format(fps, latencyMs, e2e)
+                    "%.0f dec fps  •  %dms dec  •  %dms e2e$rttStr".format(fps, latencyMs, e2e)
                 else
-                    "%.0f fps  •  %dms dec$rttStr".format(fps, latencyMs)
-                val streamLine = if (outW > 0 && outH > 0)
-                    "${outW}x${outH}  •  ${rxKbps} kbps rx"
+                    "%.0f dec fps  •  %dms dec$rttStr".format(fps, latencyMs)
+                if (picW > 0 && picH > 0) {
+                    lastBufW = bufW; lastBufH = bufH
+                    lastPicW = picW; lastPicH = picH
+                    lastCropL = cropL; lastCropT = cropT
+                    applyVideoTransform()
+                }
+                val streamLine = if (picW > 0 && picH > 0)
+                    "${picW}x${picH}  •  ${rxKbps} kbps rx"
                 else
-                    "resolucion pendiente  •  ${rxKbps} kbps rx"
-                hudText.text = "$videoLine\n$streamLine\n$activeStreamProfile"
+                    getString(R.string.resolution_pending, rxKbps)
+                if (hudEnabled) {
+                    hudText.text = "$videoLine\n$streamLine\n$activeStreamProfile"
+                    hudText.visibility = View.VISIBLE
+                } else {
+                    hudText.visibility = View.GONE
+                }
             }
         }
+    }
+
+    private fun showFaqDialog() {
+        val faq = Html.fromHtml(getString(R.string.help_content), Html.FROM_HTML_MODE_LEGACY)
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.help_title))
+            .setMessage(faq)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun toggleLanguage() {
+        val newCode = if (selectedLanguageCode() == "es") "en" else "es"
+        saveLanguageCode(newCode)
+        if (connected) {
+            stopAll()
+        }
+        recreate()
+    }
+
+    private fun updateLanguageButtonLabel() {
+        languageButton.text = if (selectedLanguageCode() == "es") "EN" else "ES"
+    }
+
+    private fun selectedLanguageCode(): String {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val stored = prefs.getString(PREF_LANGUAGE, null)
+        if (stored == "es" || stored == "en") {
+            return stored
+        }
+        return "en"
+    }
+
+    private fun saveLanguageCode(code: String) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PREF_LANGUAGE, code)
+            .apply()
+    }
+
+    private fun applyLanguage(code: String) {
+        val locale = java.util.Locale(code)
+        java.util.Locale.setDefault(locale)
+        val cfg = Configuration(resources.configuration)
+        @Suppress("DEPRECATION")
+        cfg.setLocale(locale)
+        @Suppress("DEPRECATION")
+        resources.updateConfiguration(cfg, resources.displayMetrics)
+    }
+
+    private fun showQuickMenu() {
+        val options = arrayOf(
+            getString(R.string.menu_quick_select_monitor),
+            getString(R.string.menu_quick_reset_latency),
+            getString(R.string.menu_quick_show_logs),
+            getString(R.string.menu_quick_reconnect)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.menu_quick_title))
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showDetectedMonitorPicker()
+                    1 -> {
+                        minObservedClockDeltaMs = Long.MAX_VALUE
+                        emaE2eMs = 0f
+                        appendLog("E2E latency baseline reset")
+                    }
+                    2 -> {
+                        if (connected) {
+                            streamContainer.visibility = View.GONE
+                            logScroll.visibility = View.VISIBLE
+                            topPanel.visibility = View.VISIBLE
+                            setImmersiveMode(false)
+                            appendLog("Log view opened")
+                        }
+                    }
+                    3 -> {
+                        if (connected) {
+                            requestStreamReconnect("menu: manual reconnect")
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(getString(R.string.menu_cancel), null)
+            .show()
+    }
+
+    private fun showDetectedMonitorPicker() {
+        val host = currentServerHost()
+        val request = Request.Builder().url("http://$host:9001/displays").build()
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    appendLog(getString(R.string.monitor_fetch_error, e.message ?: "network error"))
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful || body.isBlank()) {
+                    runOnUiThread {
+                        appendLog(getString(R.string.monitor_fetch_error, "http ${response.code}"))
+                    }
+                    return
+                }
+
+                val arr = try {
+                    JSONArray(body)
+                } catch (_: Exception) {
+                    null
+                }
+
+                if (arr == null || arr.length() == 0) {
+                    runOnUiThread {
+                        appendLog(getString(R.string.monitor_none_found))
+                    }
+                    return
+                }
+
+                val labels = Array(arr.length()) { i ->
+                    val item = arr.getJSONObject(i)
+                    val idx = item.optInt("index", i)
+                    val w = item.optInt("width", 0)
+                    val h = item.optInt("height", 0)
+                    val primary = item.optBoolean("is_primary", false)
+                    val tag = if (primary) getString(R.string.monitor_primary_tag) else getString(R.string.monitor_secondary_tag)
+                    "#$idx  ${w}x${h}  ($tag)"
+                }
+
+                runOnUiThread {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(getString(R.string.monitor_picker_title))
+                        .setItems(labels) { _, which ->
+                            val picked = arr.getJSONObject(which).optInt("index", which)
+                            displayInput.setText(picked.toString())
+                            appendLog(getString(R.string.monitor_selected_log, picked))
+                        }
+                        .setNegativeButton(getString(R.string.menu_cancel), null)
+                        .show()
+                }
+            }
+        })
     }
 
     private fun requestStreamReconnect(reason: String) {
@@ -668,7 +946,7 @@ class MainActivity : AppCompatActivity() {
         reconnectHandler.removeCallbacks(streamReconnectRunnable)
         runOnUiThread {
             appendLog("Reabriendo stream: $reason")
-            statusText.text = "Estado: reabriendo stream..."
+            statusText.text = getString(R.string.status_reopened_stream)
         }
 
         val socket = streamSocket
@@ -684,7 +962,7 @@ private class H264Decoder(
     private val surface: Surface,
     private val width: Int,
     private val height: Int,
-    private val onHudUpdate: (fps: Float, latencyMs: Long, outW: Int, outH: Int, rxKbps: Long) -> Unit
+    private val onHudUpdate: (fps: Float, latencyMs: Long, bufW: Int, bufH: Int, picW: Int, picH: Int, cropL: Int, cropT: Int, rxKbps: Long) -> Unit
 ) {
     private val codec: MediaCodec = MediaCodec.createDecoderByType("video/avc")
     private val parser = AnnexBParser { nal -> queueNal(nal) }
@@ -738,6 +1016,12 @@ private class H264Decoder(
     private var bytesAtLastHud = 0L
     @Volatile private var outputWidth = -1
     @Volatile private var outputHeight = -1
+    @Volatile private var bufferWidth = -1
+    @Volatile private var bufferHeight = -1
+    @Volatile private var cropLeft = 0
+    @Volatile private var cropTop = 0
+    @Volatile private var pictureWidth = -1
+    @Volatile private var pictureHeight = -1
     // EMA-smoothed values — prevent the HUD from flickering due to measurement noise.
     // Alpha 0.25: new sample contributes 25%, history 75%. Smooths ±1-frame window jitter.
     private var emaFps = 0f
@@ -942,10 +1226,28 @@ private class H264Decoder(
                 MediaCodec.INFO_TRY_AGAIN_LATER -> break
                 MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     val fmt = codec.outputFormat
-                    outputWidth = if (fmt.containsKey(MediaFormat.KEY_WIDTH)) fmt.getInteger(MediaFormat.KEY_WIDTH) else -1
-                    outputHeight = if (fmt.containsKey(MediaFormat.KEY_HEIGHT)) fmt.getInteger(MediaFormat.KEY_HEIGHT) else -1
-                    android.util.Log.d("H264Decoder", "Output format: ${codec.outputFormat}")
+                    val bW = if (fmt.containsKey(MediaFormat.KEY_WIDTH)) fmt.getInteger(MediaFormat.KEY_WIDTH) else -1
+                    val bH = if (fmt.containsKey(MediaFormat.KEY_HEIGHT)) fmt.getInteger(MediaFormat.KEY_HEIGHT) else -1
+                    // Some hardware decoders allocate a buffer larger than the picture and
+                    // report the visible region via crop keys. If absent, the full buffer is
+                    // the picture (common on software decoders and stock Qualcomm).
+                    val cL = if (fmt.containsKey("crop-left")) fmt.getInteger("crop-left") else 0
+                    val cT = if (fmt.containsKey("crop-top")) fmt.getInteger("crop-top") else 0
+                    val cR = if (fmt.containsKey("crop-right")) fmt.getInteger("crop-right") else (if (bW > 0) bW - 1 else -1)
+                    val cB = if (fmt.containsKey("crop-bottom")) fmt.getInteger("crop-bottom") else (if (bH > 0) bH - 1 else -1)
+                    val pW = if (cR >= 0 && cL >= 0) cR - cL + 1 else bW
+                    val pH = if (cB >= 0 && cT >= 0) cB - cT + 1 else bH
+                    bufferWidth = bW; bufferHeight = bH
+                    cropLeft = cL; cropTop = cT
+                    pictureWidth = pW; pictureHeight = pH
+                    outputWidth = pW; outputHeight = pH
+                    android.util.Log.i("H264Decoder",
+                        "Format changed: buf=${bW}x${bH} crop=(${cL},${cT},${cR},${cB}) pic=${pW}x${pH}")
+                    if (pW > 0 && pH > 0) {
+                        onHudUpdate(emaFps, emaLatencyMs.toLong(), bW, bH, pW, pH, cL, cT, 0L)
+                    }
                 }
+                @Suppress("DEPRECATION")
                 MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> { /* no-op in API 21+ */ }
                 else -> if (outIndex >= 0) {
                     framesRendered++
@@ -967,7 +1269,7 @@ private class H264Decoder(
                         emaFps = if (emaFps < 1f) instantFps else alpha * instantFps + (1f - alpha) * emaFps
                         emaLatencyMs = if (emaLatencyMs < 1f) latencyMs.toFloat()
                                        else alpha * latencyMs + (1f - alpha) * emaLatencyMs
-                        onHudUpdate(emaFps, emaLatencyMs.toLong(), outputWidth, outputHeight, instantRxKbps)
+                        onHudUpdate(emaFps, emaLatencyMs.toLong(), bufferWidth, bufferHeight, pictureWidth, pictureHeight, cropLeft, cropTop, instantRxKbps)
                         hudFrameCount = 0
                         hudLastMs = nowMs
                     }

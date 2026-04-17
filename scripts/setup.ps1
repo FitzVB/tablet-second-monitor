@@ -200,7 +200,7 @@ $nextSteps = @"
 
 6. Connect on Tablet:
    - Launch app
-   - Tap "Conectar"
+    - Tap "Connect"
    - Video should appear
 
 For detailed setup instructions, see: SETUP.md

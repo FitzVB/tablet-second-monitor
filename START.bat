@@ -8,8 +8,8 @@ title Tablet Monitor
 set "LAUNCHER=%~dp0scripts\launcher.ps1"
 
 if not exist "%LAUNCHER%" (
-    echo  ERROR: No se encontro scripts\launcher.ps1
-    echo  Nota: Asegurate de ejecutar desde la raiz del proyecto.
+    echo  ERROR: scripts\launcher.ps1 not found
+    echo  Note: Make sure you run this from the project root.
     pause
     exit /b 1
 )

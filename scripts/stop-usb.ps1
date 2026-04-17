@@ -15,9 +15,9 @@ function Resolve-AdbPath {
 
 $adb = Resolve-AdbPath -Root $root
 if ($adb) {
-    & $adb reverse --remove tcp:9001 2>$null | Out-Null
-    Write-Host "ADB reverse removido en tcp:9001"
+    & $adb reverse --remove-all 2>$null | Out-Null
+    Write-Host "ADB reverse removed (all rules)"
 }
 
 Stop-Process -Name "host-windows" -Force -ErrorAction SilentlyContinue
-Write-Host "Host detenido."
+Write-Host "Host stopped."

@@ -1,6 +1,14 @@
 # Setup Guide - Tablet Second Monitor
 
-Guía completa de instalación y configuración para trabajar en este proyecto.
+Complete installation and configuration guide for this project.
+
+## Recommended workflow
+
+For daily use, avoid running the host manually unless you are debugging.
+
+- Start: `START.bat`
+- Stop and clean USB tunnel: `scripts\STOP.bat`
+- USB is the recommended mode.
 
 ---
 
@@ -348,7 +356,7 @@ adb shell am start -n com.example.tabletmonitor/.MainActivity
 
 ### 6. Connect on Tablet UI
 
-- Tap "Conectar" button on tablet app
+- Tap "Connect" in the tablet app
 - Video stream should appear on SurfaceView
 - View connection logs in app UI
 

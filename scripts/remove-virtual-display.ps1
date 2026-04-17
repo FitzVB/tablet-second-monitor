@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not (Get-Command pnputil.exe -ErrorAction SilentlyContinue)) {
-    throw "pnputil.exe no esta disponible en este sistema."
+    throw "pnputil.exe is not available on this system."
 }
 
 function Get-DriverMatches {
@@ -44,16 +44,16 @@ $targets = if ($PublishedName) {
 }
 
 if ($targets.Count -eq 0) {
-    throw "No se encontraron drivers que coincidan con '$Match'."
+    throw "No drivers matching '$Match' were found."
 }
 
 foreach ($target in $targets) {
-    Write-Host "Eliminando driver: $($target.PublishedName)" -ForegroundColor Cyan
+    Write-Host "Removing driver: $($target.PublishedName)" -ForegroundColor Cyan
     pnputil.exe /delete-driver $target.PublishedName /uninstall /force
 
     if ($LASTEXITCODE -ne 0) {
-        throw "pnputil devolvio codigo $LASTEXITCODE al eliminar $($target.PublishedName)"
+        throw "pnputil returned exit code $LASTEXITCODE while removing $($target.PublishedName)"
     }
 }
 
-Write-Host "Driver(s) eliminados." -ForegroundColor Green
+Write-Host "Driver(s) removed." -ForegroundColor Green

@@ -11,6 +11,18 @@ use tracing::{error, info};
 use warp::ws::Message;
 use warp::Filter;
 
+#[cfg(windows)]
+fn enable_dpi_awareness() {
+    unsafe {
+        // Ensure monitor geometry/capture runs in physical pixels, not DPI-virtualized coords.
+        // This prevents mirror-mode crops where the bottom taskbar area is missing.
+        winapi::um::winuser::SetProcessDPIAware();
+    }
+}
+
+#[cfg(not(windows))]
+fn enable_dpi_awareness() {}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 struct HostSettings {
     preferred_encoder: Option<String>,
@@ -228,27 +240,27 @@ fn host_gui_html() -> &'static str {
 <body>
     <div class="card">
         <h1>Tablet Monitor Host</h1>
-        <div class="sub">Encoder, GPU y perfil de calidad del stream.</div>
+        <div class="sub">Encoder, GPU and stream quality profile.</div>
         <div class="grid">
             <div class="row">
-                <label for="encoder">Encoder preferido</label>
+                <label for="encoder">Preferred encoder</label>
                 <select id="encoder"></select>
             </div>
             <div class="row">
-                <label for="gpu">GPU preferida para AMF</label>
+                <label for="gpu">Preferred AMF GPU</label>
                 <select id="gpu"></select>
             </div>
             <div class="row" style="grid-column:span 2;">
-                <label for="preset">Perfil de calidad</label>
+                <label for="preset">Quality profile</label>
                 <select id="preset"></select>
             </div>
         </div>
         <div style="margin-top:14px; display:flex; gap:8px;">
-            <button id="save">Guardar y aplicar</button>
-            <button id="refresh" style="background:#384865;">Recargar deteccion</button>
+            <button id="save">Save and apply</button>
+            <button id="refresh" style="background:#384865;">Reload detection</button>
         </div>
         <div id="status" class="status"></div>
-        <div class="hint">Guardar y aplicar persiste el perfil seleccionado. Recargar deteccion vuelve a consultar GPUs y encoders del host, pero no guarda cambios pendientes.</div>
+        <div class="hint">Save and apply persists the selected profile. Reload detection refreshes host GPUs and encoders, but does not save pending changes.</div>
     </div>
 <script>
 let statusTimer = null;
@@ -296,13 +308,13 @@ async function loadAll(){
     const preset = document.getElementById('preset');
     preset.innerHTML = '';
     const presetDefs = [
-        { value: '',           label: 'auto (desde cliente)' },
-        { value: 'ahorro',     label: 'Ahorro \u2014 960\u00d7544 \u00b7 30fps \u00b7 5 Mbps' },
-        { value: 'equilibrado',label: 'Equilibrado \u2014 1280\u00d7720 \u00b7 60fps \u00b7 10 Mbps' },
-        { value: 'alta_720p',  label: 'Alta calidad 720p \u2014 1280\u00d7720 \u00b7 60fps \u00b7 15 Mbps' },
-        { value: 'fluido_900p',label: 'Fluido 900p \u2014 1600\u00d7900 \u00b7 60fps \u00b7 20 Mbps' },
-        { value: 'full_hd',    label: 'Full HD oficina \u2014 1920\u00d71080 \u00b7 60fps \u00b7 25 Mbps' },
-        { value: 'full_hd_max',label: 'Full HD detalle \u2014 1920\u00d71080 \u00b7 60fps \u00b7 35 Mbps' },
+        { value: '',           label: 'auto (from client)' },
+        { value: 'ahorro',     label: 'Power saver \u2014 960\u00d7544 \u00b7 30fps \u00b7 5 Mbps' },
+        { value: 'equilibrado',label: 'Balanced \u2014 1280\u00d7720 \u00b7 60fps \u00b7 10 Mbps' },
+        { value: 'alta_720p',  label: 'High quality 720p \u2014 1280\u00d7720 \u00b7 60fps \u00b7 15 Mbps' },
+        { value: 'fluido_900p',label: 'Smooth 900p \u2014 1600\u00d7900 \u00b7 60fps \u00b7 20 Mbps' },
+        { value: 'full_hd',    label: 'Full HD office \u2014 1920\u00d71080 \u00b7 60fps \u00b7 25 Mbps' },
+        { value: 'full_hd_max',label: 'Full HD detail \u2014 1920\u00d71080 \u00b7 60fps \u00b7 35 Mbps' },
     ];
     presetDefs.forEach(p => { const o=document.createElement('option'); o.value=p.value; o.textContent=p.label; preset.appendChild(o); });
     preset.value = set.preferred_preset || '';
@@ -311,7 +323,7 @@ async function loadAll(){
 async function save(){
     const saveBtn = document.getElementById('save');
     saveBtn.disabled = true;
-    setStatus('Guardando configuracion...', 'busy');
+    setStatus('Saving configuration...', 'busy');
     const payload = {
         preferred_encoder: document.getElementById('encoder').value || null,
         preferred_amf_device: document.getElementById('gpu').value === '' ? null : Number(document.getElementById('gpu').value),
@@ -331,12 +343,12 @@ async function save(){
         });
         if (res.ok) {
             await loadAll();
-            setStatus('Configuracion guardada y aplicada', 'ok', 2600);
+            setStatus('Configuration saved and applied', 'ok', 2600);
         } else {
-            setStatus('No se pudo guardar', 'error', 5000);
+            setStatus('Could not save settings', 'error', 5000);
         }
     } catch (_e) {
-        setStatus('Tiempo de espera agotado al guardar', 'error', 5000);
+        setStatus('Timed out while saving', 'error', 5000);
     } finally {
         clearTimeout(timeoutId);
         saveBtn.disabled = false;
@@ -408,6 +420,7 @@ struct StreamQuery {
     fps: Option<u32>,
     bitrate_kbps: Option<u32>,
     encoder: Option<String>,
+    mode: Option<String>,
     display: Option<u32>,
 }
 
@@ -419,6 +432,8 @@ struct InputQuery {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    enable_dpi_awareness();
+
     tracing_subscriber::fmt()
         .with_env_filter("info")
         .with_target(false)
@@ -479,6 +494,13 @@ async fn main() -> anyhow::Result<()> {
                 gpus: detect_gpus(),
             };
             warp::reply::json(&caps)
+        });
+
+    let displays_route = warp::path("displays")
+        .and(warp::get())
+        .map(|| {
+            let displays = input::list_displays().unwrap_or_else(|_| Vec::new());
+            warp::reply::json(&displays)
         });
 
     let settings_get_route = warp::path!("api" / "settings")
@@ -577,6 +599,7 @@ async fn main() -> anyhow::Result<()> {
         ui_route
             .or(health)
             .or(capabilities_route)
+            .or(displays_route)
             .or(settings_get_route)
             .or(settings_post_route)
             .or(h264_route)
@@ -731,34 +754,72 @@ async fn handle_h264_stream(
 
         let settings_snapshot = settings.read().await.clone();
 
-        // Resolve active (width, height, fps, bitrate) — preset takes full priority.
-        let (out_w, out_h, fps, bitrate) = if let Some(ref pname) = settings_snapshot.preferred_preset {
+        let stream_mode = query
+            .mode
+            .as_deref()
+            .map(|m| m.to_ascii_lowercase())
+            .unwrap_or_else(|| "mirror".to_string());
+
+        // Display index: for "mirror" mode prefer explicit selection.
+        // If not set by client, keep 0 as safe fallback.
+        let default_display_idx = if stream_mode.eq_ignore_ascii_case("extended") {
+            input::default_display_for_mode(&stream_mode).unwrap_or(0)
+        } else {
+            0
+        };
+        let display_idx = query.display.unwrap_or(default_display_idx).clamp(0, 9);
+
+        // Resolve active (width, height, fps, bitrate).
+        // Priority: user-set preset > manual w/h override > host display size (mirror) > client query > defaults.
+        // In mirror mode the host is source-of-truth for geometry so Android only renders.
+        let (preset_w, preset_h, preset_fps, preset_bitrate) = if let Some(ref pname) = settings_snapshot.preferred_preset {
             if let Some((pw, ph, pfps, pbr)) = resolve_preset(pname) {
-                (pw, ph, pfps, pbr)
+                (Some(pw), Some(ph), Some(pfps), Some(pbr))
             } else {
-                // Unknown preset name — fall back to manual/client values.
-                let rw = settings_snapshot.preferred_width.or(query.w).unwrap_or(960);
-                let rh = settings_snapshot.preferred_height.or(query.h).unwrap_or(540);
-                (
-                    rw.clamp(320, 3840) & !15,
-                    rh.clamp(240, 2160) & !15,
-                    query.fps.unwrap_or(60).clamp(10, 60),
-                    settings_snapshot.preferred_bitrate_kbps.or(query.bitrate_kbps).unwrap_or(4000).clamp(1000, 50000),
-                )
+                (None, None, None, None)
             }
         } else {
-            // No preset — use host manual overrides, then client query, then defaults.
-            let rw = settings_snapshot.preferred_width.or(query.w).unwrap_or(960);
-            let rh = settings_snapshot.preferred_height.or(query.h).unwrap_or(540);
-            (
-                rw.clamp(320, 3840) & !15,
-                rh.clamp(240, 2160) & !15,
-                query.fps.unwrap_or(60).clamp(10, 60),
-                settings_snapshot.preferred_bitrate_kbps.or(query.bitrate_kbps).unwrap_or(4000).clamp(1000, 50000),
-            )
+            (None, None, None, None)
         };
-        let display_idx = query.display.unwrap_or(0).clamp(0, 9);
 
+        let (mirror_host_w, mirror_host_h) = if stream_mode.eq_ignore_ascii_case("mirror") {
+            if let Ok(target) = input::resolve_display_target(display_idx) {
+                (Some(target.width().max(1) as u32), Some(target.height().max(1) as u32))
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
+
+        if stream_mode.eq_ignore_ascii_case("mirror") {
+            info!(display_idx, mirror_host_w = ?mirror_host_w, mirror_host_h = ?mirror_host_h, "mirror host display geometry resolved");
+        }
+
+        // Width/height resolution priority: preset > manual > host mirror display > client query > defaults.
+        let rw = preset_w
+            .or(settings_snapshot.preferred_width)
+            .or(mirror_host_w)
+            .or(query.w)
+            .unwrap_or(960);
+        let rh = preset_h
+            .or(settings_snapshot.preferred_height)
+            .or(mirror_host_h)
+            .or(query.h)
+            .unwrap_or(540);
+
+        let out_w = rw.clamp(320, 3840) & !15;
+        let out_h = rh.clamp(240, 2160) & !15;
+        // FPS/bitrate priority: preset > query > defaults.
+        let fps = preset_fps
+            .or(query.fps)
+            .unwrap_or(60)
+            .clamp(10, 60);
+        let bitrate = preset_bitrate
+            .or(settings_snapshot.preferred_bitrate_kbps)
+            .or(query.bitrate_kbps)
+            .unwrap_or(4000)
+            .clamp(1000, 50000);
         let preferred = settings_snapshot
             .preferred_encoder
             .clone()
@@ -789,25 +850,43 @@ async fn handle_h264_stream(
 
         let hw: &[&str] = &["h264_nvenc", "h264_qsv", "h264_amf"];
         let mut candidates: Vec<(String, Capture, Vec<String>)> = Vec::new();
+        // Capture backend priority: mirror mode prefers GDIGRAB (coordinate-based capture)
+        // over DDAGRAB (index-based capture) to avoid cropping issues on non-standard resolutions.
+        // Extended mode can use DDAGRAB (DXGI) since it targets a virtual display.
+        let prefer_capture_env = std::env::var("TABLET_MONITOR_CAPTURE")
+            .ok()
+            .map(|v| v.trim().to_ascii_lowercase());
+        let capture_order: [Capture; 2] = if stream_mode.eq_ignore_ascii_case("mirror") {
+            // Mirror: try GDI (coordinate-based) first for exact monitor capture
+            [Capture::Gdigrab, Capture::Ddagrab]
+        } else if prefer_capture_env.as_deref() == Some("gdigrab") {
+            // Extended with explicit GDI preference
+            [Capture::Gdigrab, Capture::Ddagrab]
+        } else if prefer_capture_env.as_deref() == Some("ddagrab") {
+            // Extended with explicit DXGI preference
+            [Capture::Ddagrab, Capture::Gdigrab]
+        } else {
+            // Extended default: DXGI (GPU-accelerated) first for performance
+            [Capture::Ddagrab, Capture::Gdigrab]
+        };
 
         if let Some(pref) = preferred.as_deref() {
             if hw.contains(&pref) {
                 if pref == "h264_amf" {
-                    // Try every device variant with Ddagrab first (lower latency),
-                    // then every device variant with Gdigrab (more compatible).
-                    for pre in &amf_pre_args_candidates {
-                        candidates.push((pref.into(), Capture::Ddagrab, pre.clone()));
-                    }
-                    for pre in &amf_pre_args_candidates {
-                        candidates.push((pref.into(), Capture::Gdigrab, pre.clone()));
+                    for cap in capture_order {
+                        for pre in &amf_pre_args_candidates {
+                            candidates.push((pref.into(), cap, pre.clone()));
+                        }
                     }
                 } else {
-                    candidates.push((pref.into(), Capture::Ddagrab, vec![]));
-                    candidates.push((pref.into(), Capture::Gdigrab, vec![]));
+                    for cap in capture_order {
+                        candidates.push((pref.into(), cap, vec![]));
+                    }
                 }
             } else if pref == "libx264" {
-                candidates.push((pref.into(), Capture::Ddagrab, vec![]));
-                candidates.push((pref.into(), Capture::Gdigrab, vec![]));
+                for cap in capture_order {
+                    candidates.push((pref.into(), cap, vec![]));
+                }
             }
         }
 
@@ -816,25 +895,26 @@ async fn handle_h264_stream(
         }
 
         {
-            if preferred.as_deref() != Some("libx264") {
-                candidates.push(("libx264".into(), Capture::Ddagrab, vec![]));
-            }
-
             for &enc in hw {
                 if preferred.as_deref() != Some(enc) {
                     if enc == "h264_amf" {
-                        for pre in &amf_pre_args_candidates {
-                            candidates.push((enc.into(), Capture::Ddagrab, pre.clone()));
+                        for cap in capture_order {
+                            for pre in &amf_pre_args_candidates {
+                                candidates.push((enc.into(), cap, pre.clone()));
+                            }
                         }
                     } else {
-                        candidates.push((enc.into(), Capture::Ddagrab, vec![]));
+                        for cap in capture_order {
+                            candidates.push((enc.into(), cap, vec![]));
+                        }
                     }
-                    candidates.push((enc.into(), Capture::Gdigrab, vec![]));
                 }
             }
 
             if preferred.as_deref() != Some("libx264") {
-                candidates.push(("libx264".into(), Capture::Gdigrab, vec![]));
+                for cap in capture_order {
+                    candidates.push(("libx264".into(), cap, vec![]));
+                }
             }
         }
 
@@ -871,6 +951,7 @@ async fn handle_h264_stream(
                     out_h,
                     fps,
                     bitrate_kbps: bitrate,
+                    mode: stream_mode.clone(),
                     display_idx,
                     encoder: encoder.to_string(),
                     capture: *capture,
@@ -913,7 +994,7 @@ async fn handle_h264_stream(
                     if e.to_string().to_ascii_lowercase().contains("program not found") {
                         let _ = ws_tx
                             .send(Message::text(
-                                "{\"type\":\"error\",\"message\":\"FFmpeg no encontrado. Instala ffmpeg o configura TABLET_MONITOR_FFMPEG\"}".to_string(),
+                                "{\"type\":\"error\",\"message\":\"FFmpeg not found. Install ffmpeg or set TABLET_MONITOR_FFMPEG\"}".to_string(),
                             ))
                             .await;
                         break;
@@ -970,7 +1051,15 @@ enum StreamExit {
 async fn handle_input_socket(socket: warp::ws::WebSocket, query: InputQuery) {
     let (mut ws_tx, mut ws_rx) = socket.split();
     let mode = query.mode.unwrap_or_else(|| "mirror".to_string());
-    let display_idx = query.display.unwrap_or(0);
+    let default_display_idx = input::default_display_for_mode(&mode).unwrap_or(0);
+    let display_idx = query.display.unwrap_or(default_display_idx).clamp(0, 9);
+    let display_target = match input::resolve_display_target(display_idx) {
+        Ok(target) => Some(target),
+        Err(e) => {
+            error!(display_idx, "failed to resolve input display target: {e}");
+            None
+        }
+    };
 
     info!(mode, display_idx, "input channel connected");
 
@@ -997,7 +1086,11 @@ async fn handle_input_socket(socket: warp::ws::WebSocket, query: InputQuery) {
 
                 match serde_json::from_str::<input::PointerInputEvent>(text) {
                     Ok(event) => {
-                        if let Err(e) = input::inject_pointer_event(&event) {
+                        let Some(target) = display_target.as_ref() else {
+                            error!("input dropped: no display target available");
+                            continue;
+                        };
+                        if let Err(e) = input::inject_pointer_event(&event, target) {
                             error!("input inject error: {e}");
                         }
                     }
@@ -1023,6 +1116,7 @@ struct FfmpegConfig {
     out_h: u32,
     fps: u32,
     bitrate_kbps: u32,
+    mode: String,
     display_idx: u32,
     encoder: String,
     capture: Capture,
@@ -1060,6 +1154,7 @@ async fn stream_with_ffmpeg(
         }
         Capture::Gdigrab => {
             // Disable input probing: gdigrab doesn't need it and skipping saves ~500 ms.
+            let maybe_target = input::resolve_display_target(config.display_idx).ok();
             args.extend([
                 "-probesize".into(),
                 "32".into(),
@@ -1069,6 +1164,18 @@ async fn stream_with_ffmpeg(
                 "gdigrab".into(),
                 "-framerate".into(),
                 config.fps.to_string(),
+            ]);
+            if let Some(target) = maybe_target {
+                args.extend([
+                    "-offset_x".into(),
+                    target.left().to_string(),
+                    "-offset_y".into(),
+                    target.top().to_string(),
+                    "-video_size".into(),
+                    format!("{}x{}", target.width(), target.height()),
+                ]);
+            }
+            args.extend([
                 "-i".into(),
                 "desktop".into(),
             ]);
@@ -1101,10 +1208,20 @@ async fn stream_with_ffmpeg(
     // guaranteed latency per-frame. Instead, -r {fps} on the output forces exactly {fps}
     // timestamps via the cfr muxer without any per-frame buffering in the filtergraph.
     // format=yuv420p: convert bgr0 (gdigrab) and bgra (ddagrab) to planar YUV.
-    let vf = format!(
-        "scale={}:{}:force_original_aspect_ratio=increase,crop={}:{},format=yuv420p",
-        config.out_w, config.out_h, config.out_w, config.out_h
-    );
+    let vf = if config.mode.eq_ignore_ascii_case("mirror") {
+        // Mirror mode: fit-center. Scale down to preserve aspect, then pad to fill with black,
+        // centering the content. After decoding, TextureView applies a transform matrix for final centering.
+        format!(
+            "scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p",
+            config.out_w, config.out_h, config.out_w, config.out_h
+        )
+    } else {
+        // Extended mode: fill-crop. Scale up to preserve aspect, then center-crop to target resolution.
+        format!(
+            "scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}:(iw-{})/2:(ih-{})/2,format=yuv420p",
+            config.out_w, config.out_h, config.out_w, config.out_h, config.out_w, config.out_h
+        )
+    };
     args.extend(["-vf".into(), vf, "-an".into()]);
 
     // Force exactly fps output frames/sec via muxer timestamp assignment (no FIFO).
