@@ -30,14 +30,14 @@ jobs:
         run: chmod +x android-client/gradlew
       
       - name: Build APK (Debug)
-        run: cd android-client && ./gradlew assembleDebug --verbose
+        run: cd android-client && ./gradlew assembleDebug --info
       
       - name: Build APK (Release)
-        run: cd android-client && ./gradlew assembleRelease --verbose
+        run: cd android-client && ./gradlew assembleRelease --info
         continue-on-error: true  # Release build fails without signing
       
       - name: Run tests
-        run: cd android-client && ./gradlew test --verbose
+        run: cd android-client && ./gradlew test --info
         continue-on-error: true
       
       - name: Upload Debug APK
@@ -67,7 +67,7 @@ jobs:
           cache: gradle
       
       - name: Run lint
-        run: cd android-client && ./gradlew lint --verbose
+        run: cd android-client && ./gradlew lint --info
         continue-on-error: true
       
       - name: Upload Lint Report
@@ -91,5 +91,5 @@ jobs:
           cache: gradle
       
       - name: Run detekt analysis
-        run: cd android-client && ./gradlew detekt --verbose
+        run: cd android-client && ./gradlew detekt --info
         continue-on-error: true

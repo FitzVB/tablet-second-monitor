@@ -247,11 +247,11 @@
     },
     "start_usb": {
       "name": "Start USB tunnel and host",
-      "file": "start-usb.bat"
+      "file": "scripts/start-usb.ps1"
     },
     "stop_usb": {
       "name": "Stop USB tunnel",
-      "file": "stop-usb.bat"
+      "file": "scripts/stop-usb.ps1"
     }
   },
   "troubleshooting": {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Tablet Second Monitor</string>
+    <string name="app_name">Monitor para Tablet</string>
     <string name="app_subtitle">Usa tu tablet como segundo monitor para la PC</string>
 
     <!-- Card de conexión -->
@@ -27,8 +27,12 @@
     <!-- Botones -->
     <string name="btn_connect">Conectar</string>
     <string name="btn_disconnect">Desconectar</string>
-    <string name="btn_help">?</string>
+    <string name="btn_help">FAQ</string>
     <string name="btn_language">EN</string>
+    <string name="btn_menu">Menu</string>
+    <string name="language_title">Idioma de la app</string>
+    <string name="language_spanish">Espanol</string>
+    <string name="language_english">Ingles</string>
 
     <!-- Mensajes de estado -->
     <string name="status_disconnected">Desconectado · Presiona Conectar para comenzar</string>
@@ -39,6 +43,10 @@
     <string name="status_reopening_stream">Reabriendo stream…</string>
     <string name="status_stream_error">Estado: %1$s</string>
     <string name="status_invalid_ip">IP invalida. Usa 127.0.0.1, localhost o una IPv4 como 192.168.1.62</string>
+    <string name="status_reopened_stream">Estado: reabriendo stream…</string>
+    <string name="profile_pending">perfil: pendiente</string>
+    <string name="profile_waiting_host_cfg">perfil: esperando config del host</string>
+    <string name="resolution_pending">resolucion pendiente  •  %1$d kbps rx</string>
 
     <!-- Log -->
     <string name="log_default">— log —</string>
@@ -46,37 +54,29 @@
     <!-- Diálogo de ayuda -->
     <string name="help_title">Ayuda</string>
     <string name="help_content"><![CDATA[
-<b>Cómo conectar por cable USB (recomendado)</b><br/>
-1. Instala ADB en tu PC y conecta el tablet con un cable USB.<br/>
-2. Ejecuta en una terminal de la PC:<br/>
-&nbsp;&nbsp;<tt>adb reverse tcp:9001 tcp:9001</tt><br/>
-3. Abre el programa host en tu PC.<br/>
-4. Deja la IP como <b>127.0.0.1</b> y presiona <b>Conectar</b>.<br/><br/>
+<b>Inicio rapido (USB - recomendado)</b><br/>
+1. Conecta la tablet a la PC por cable USB.<br/>
+2. En la PC ejecuta <b>START.bat</b> y elige <b>USB</b>.<br/>
+3. En esta app deja IP en <b>127.0.0.1</b> y toca <b>Conectar</b>.<br/><br/>
 
-<b>Cómo conectar por Wi-Fi</b><br/>
-1. Asegúrate que tu PC y el tablet estén en la misma red Wi-Fi.<br/>
-2. Busca la IP local de tu PC: abre una terminal y escribe <tt>ipconfig</tt>.<br/>
-&nbsp;&nbsp;Busca "Dirección IPv4", por ejemplo <b>192.168.1.50</b>.<br/>
-3. Escribe esa IP en el campo de dirección y presiona <b>Conectar</b>.<br/><br/>
+<b>Inicio rapido (Wi-Fi)</b><br/>
+1. Conecta PC y tablet a la misma red Wi-Fi.<br/>
+2. Ejecuta <b>START.bat</b> y elige <b>Wi-Fi</b>.<br/>
+3. Escribe la IP de tu PC y toca <b>Conectar</b>.<br/><br/>
 
-<b>Modos de pantalla</b><br/>
-• <b>Espejo</b> – el tablet muestra exactamente lo mismo que la pantalla del PC.<br/>
-• <b>Extendido</b> – el tablet funciona como un segundo monitor independiente. Windows lo ve como una pantalla aparte.<br/><br/>
+<b>Modo</b><br/>
+• <b>Espejo</b>: clona el monitor principal.<br/>
+• <b>Extendido</b>: usa la tablet como segundo monitor.<br/><br/>
 
-<b>Monitor destino (avanzado)</b><br/>
-Solo es relevante en modo <b>Extendido</b> si tienes más de dos monitores.<br/>
-Déjalo vacío y la app lo elegirá automáticamente.<br/>
-Si necesitas uno específico: abre Configuración de Windows → Sistema → Pantalla y fíjate en el número que aparece en cada pantalla (1, 2, 3…). Pon ese número aquí.<br/><br/>
+<b>Monitor destino</b><br/>
+Dejalo vacio para seleccion automatica.<br/>
+Si hace falta, escribe numero de monitor (0, 1, 2...).<br/><br/>
 
-<b>HUD de rendimiento</b><br/>
-Muestra en la esquina superior derecha el FPS, la latencia y el bitrate mientras transmites.<br/>
-Actívalo o desactívalo con el interruptor de este panel antes de conectar.<br/><br/>
+<b>Idioma</b><br/>
+Usa el boton <b>EN/ES</b> arriba para cambiar todo el idioma de la app.<br/><br/>
 
-<b>¿Pantalla negra en Netflix / apps de streaming?</b><br/>
-Esto es normal. Windows protege el contenido DRM (Netflix, Prime, Disney+) para que no pueda capturarse. No tiene solución; es una restricción de seguridad de Windows.<br/><br/>
-
-<b>Consejo: para detener el stream</b><br/>
-Presiona el botón Atrás en tu tablet.
+<b>Detener sesion</b><br/>
+Toca <b>Desconectar</b> en la app, o ejecuta <b>scripts\\STOP.bat</b> en la PC.
     ]]></string>
 
     <!-- Toast DRM -->
@@ -85,4 +85,18 @@ Presiona el botón Atrás en tu tablet.
     <!-- Mensajes de log -->
     <string name="log_connecting">%1$s: conectando a %2$s en modo %3$s</string>
     <string name="log_invalid_ip">IP invalida ingresada: %1$s</string>
+
+    <string name="menu_quick_title">Menu rapido</string>
+    <string name="menu_quick_select_monitor">Elegir monitor detectado</string>
+    <string name="menu_quick_reset_latency">Resetear baseline de latencia</string>
+    <string name="menu_quick_show_logs">Mostrar logs</string>
+    <string name="menu_quick_reconnect">Forzar reconexion de stream</string>
+    <string name="menu_cancel">Cancelar</string>
+
+    <string name="monitor_picker_title">Monitores detectados</string>
+    <string name="monitor_primary_tag">Primario</string>
+    <string name="monitor_secondary_tag">Secundario</string>
+    <string name="monitor_fetch_error">Error al obtener monitores: %1$s</string>
+    <string name="monitor_none_found">No se detectaron monitores en el host</string>
+    <string name="monitor_selected_log">Monitor seleccionado: %1$d</string>
 </resources>

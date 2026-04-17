@@ -29,3 +29,7 @@ captures/
 dist/
 .cache/
 *.zip
+
+# Local debug captures (manual QA artifacts)
+tm_*.png
+tm_ui*.xml

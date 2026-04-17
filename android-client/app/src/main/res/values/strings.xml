@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Tablet Second Monitor</string>
+    <string name="app_name">Tablet Monitor</string>
     <string name="app_subtitle">Use your tablet as a second PC monitor</string>
 
     <!-- Connection card -->
@@ -27,8 +27,12 @@
     <!-- Buttons -->
     <string name="btn_connect">Connect</string>
     <string name="btn_disconnect">Disconnect</string>
-    <string name="btn_help">?</string>
+    <string name="btn_help">FAQ</string>
     <string name="btn_language">ES</string>
+    <string name="btn_menu">Menu</string>
+    <string name="language_title">App language</string>
+    <string name="language_spanish">Spanish</string>
+    <string name="language_english">English</string>
 
     <!-- Status messages -->
     <string name="status_disconnected">Disconnected · Press Connect to start</string>
@@ -39,6 +43,10 @@
     <string name="status_reopening_stream">Reopening stream…</string>
     <string name="status_stream_error">Status: %1$s</string>
     <string name="status_invalid_ip">Invalid IP. Use 127.0.0.1, localhost, or an IPv4 like 192.168.1.62</string>
+    <string name="status_reopened_stream">Status: reopening stream…</string>
+    <string name="profile_pending">profile: pending</string>
+    <string name="profile_waiting_host_cfg">profile: waiting host config</string>
+    <string name="resolution_pending">resolution pending  •  %1$d kbps rx</string>
 
     <!-- Log defaults -->
     <string name="log_default">— log —</string>
@@ -46,37 +54,29 @@
     <!-- Help dialog -->
     <string name="help_title">Help</string>
     <string name="help_content"><![CDATA[
-<b>How to connect via USB (recommended)</b><br/>
-1. Install ADB on your PC and connect the tablet with a USB cable.<br/>
-2. Run in a terminal on your PC:<br/>
-&nbsp;&nbsp;<tt>adb reverse tcp:9001 tcp:9001</tt><br/>
-3. Start the host app on your PC.<br/>
-4. Leave the IP field as <b>127.0.0.1</b> and press <b>Connect</b>.<br/><br/>
+<b>Quick start (USB - recommended)</b><br/>
+1. Connect your tablet to the PC with a USB cable.<br/>
+2. Run <b>START.bat</b> on the PC and choose <b>USB</b>.<br/>
+3. In this app, keep IP as <b>127.0.0.1</b> and tap <b>Connect</b>.<br/><br/>
 
-<b>How to connect via Wi-Fi</b><br/>
-1. Make sure your PC and tablet are on the same Wi-Fi network.<br/>
-2. Find your PC\'s local IP: open a terminal and run <tt>ipconfig</tt> (Windows).<br/>
-&nbsp;&nbsp;Look for "IPv4 Address", e.g. <b>192.168.1.50</b>.<br/>
-3. Enter that IP in the IP Address field and press <b>Connect</b>.<br/><br/>
+<b>Quick start (Wi-Fi)</b><br/>
+1. Connect PC and tablet to the same Wi-Fi.<br/>
+2. Run <b>START.bat</b> and choose <b>Wi-Fi</b>.<br/>
+3. Enter your PC IP in this app and tap <b>Connect</b>.<br/><br/>
 
-<b>Display modes</b><br/>
-• <b>Mirror</b> – the tablet shows exactly what is on your PC screen.<br/>
-• <b>Extended</b> – the tablet acts as a second independent monitor. Windows sees it as a separate display.<br/><br/>
+<b>Mode</b><br/>
+• <b>Mirror</b>: clone your main monitor.<br/>
+• <b>Extended</b>: use tablet as a second monitor.<br/><br/>
 
-<b>Target monitor (advanced)</b><br/>
-Only relevant in <b>Extended</b> mode if you have more than two monitors.<br/>
-Leave it empty and the app will choose automatically.<br/>
-If you need a specific one: open Windows Settings → System → Display and note the number shown on each screen (1, 2, 3…). Enter that number here.<br/><br/>
+<b>Target monitor</b><br/>
+Leave empty for automatic selection.<br/>
+If needed, type monitor number (0, 1, 2...).<br/><br/>
 
-<b>Performance HUD</b><br/>
-Shows FPS, latency and bitrate in the top-right corner while streaming.<br/>
-Toggle it with the switch in this panel before connecting.<br/><br/>
+<b>Language</b><br/>
+Use the <b>EN/ES</b> button in the top bar to change all app language.<br/><br/>
 
-<b>Black screen on Netflix / streaming apps?</b><br/>
-This is normal. Windows protects DRM content (Netflix, Prime, Disney+) from screen capture. There is no workaround — it is a Windows security policy.<br/><br/>
-
-<b>Tip: to stop the stream</b><br/>
-Press the Back button on your tablet.
+<b>Stop session</b><br/>
+Tap <b>Disconnect</b> in the app, or run <b>scripts\\STOP.bat</b> on PC.
     ]]></string>
 
     <!-- DRM toast -->
@@ -85,4 +85,18 @@ Press the Back button on your tablet.
     <!-- Connection log messages -->
     <string name="log_connecting">%1$s: connecting to %2$s in %3$s mode</string>
     <string name="log_invalid_ip">Invalid IP entered: %1$s</string>
+
+    <string name="menu_quick_title">Quick menu</string>
+    <string name="menu_quick_select_monitor">Select detected monitor</string>
+    <string name="menu_quick_reset_latency">Reset latency baseline</string>
+    <string name="menu_quick_show_logs">Show logs</string>
+    <string name="menu_quick_reconnect">Force stream reconnect</string>
+    <string name="menu_cancel">Cancel</string>
+
+    <string name="monitor_picker_title">Detected monitors</string>
+    <string name="monitor_primary_tag">Primary</string>
+    <string name="monitor_secondary_tag">Secondary</string>
+    <string name="monitor_fetch_error">Monitor list error: %1$s</string>
+    <string name="monitor_none_found">No monitors detected by host</string>
+    <string name="monitor_selected_log">Selected monitor: %1$d</string>
 </resources>

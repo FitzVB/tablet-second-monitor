@@ -37,7 +37,18 @@ if ($lanIp) {
 Write-Host ""
 Write-Host "[*] Starting host on 0.0.0.0:9001 ..." -ForegroundColor Cyan
 
-Set-Location "$PSScriptRoot\host-windows"
+Stop-Process -Name "host-windows" -Force -ErrorAction SilentlyContinue
+
+$portOwners = Get-NetTCPConnection -LocalPort 9001 -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique
+foreach ($ownerPid in $portOwners) {
+    if ($ownerPid -and $ownerPid -ne $PID) {
+        Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$root = Split-Path -Parent $PSScriptRoot
+Set-Location "$root\host-windows"
 $env:TABLET_MONITOR_FPS = '60'
 
 if (Test-Path ".\target\release\host-windows.exe") {

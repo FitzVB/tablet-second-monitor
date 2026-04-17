@@ -2,71 +2,188 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF121212"
+    android:background="#FF0D121A"
     android:orientation="vertical">
 
     <LinearLayout
         android:id="@+id/topPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#FF1E1E1E"
+        android:background="#FF171D26"
         android:orientation="vertical"
-        android:padding="8dp">
+        android:padding="14dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <EditText
-                android:id="@+id/serverIpInput"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="PC IP  (127.0.0.1 = USB)"
-                android:inputType="textNoSuggestions"
-                android:singleLine="true"
-                android:textColor="#FFFFFFFF"
-                android:textColorHint="#99FFFFFF"
-                android:backgroundTint="#FF444444"
-                android:text="127.0.0.1" />
+                android:orientation="vertical">
 
-            <EditText
-                android:id="@+id/displayInput"
-                android:layout_width="72dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:hint="Auto"
-                android:inputType="number"
-                android:singleLine="true"
-                android:textColor="#FFFFFFFF"
-                android:textColorHint="#99FFFFFF"
-                android:backgroundTint="#FF444444"
-                android:text="" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
 
-            <Spinner
-                android:id="@+id/modeSpinner"
-                android:layout_width="120dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:entries="@array/display_modes"
-                android:backgroundTint="#FF444444" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="@string/app_subtitle"
+                    android:textColor="#FFAFC0DA"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
             <Button
-                android:id="@+id/connectButton"
+                android:id="@+id/menuButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="Connect" />
+                android:layout_marginEnd="6dp"
+                android:text="@string/btn_menu" />
+
+            <Button
+                android:id="@+id/languageButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:text="@string/btn_language" />
+
+            <Button
+                android:id="@+id/helpButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_help" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_pc_ip"
+            android:textColor="#FFE8EEF8"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/serverIpInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:hint="@string/hint_pc_ip"
+            android:inputType="textNoSuggestions"
+            android:singleLine="true"
+            android:text="127.0.0.1"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#99FFFFFF"
+            android:backgroundTint="#FF4D5C73" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/hint_pc_ip_desc"
+            android:textColor="#FF9FB0C7"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_display_mode"
+                    android:textColor="#FFE8EEF8"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/modeSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:entries="@array/display_modes"
+                    android:backgroundTint="#FF4D5C73" />
+            </LinearLayout>
+
+            <Space
+                android:layout_width="8dp"
+                android:layout_height="1dp" />
+
+            <LinearLayout
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_monitor_number"
+                    android:textColor="#FFE8EEF8"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/displayInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_monitor_auto"
+                    android:inputType="number"
+                    android:singleLine="true"
+                    android:text=""
+                    android:textColor="#FFFFFFFF"
+                    android:textColorHint="#99FFFFFF"
+                    android:backgroundTint="#FF4D5C73" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/connectButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/btn_connect" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Switch
+                android:id="@+id/hudToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="@string/label_hud"
+                android:textColor="#FFE8EEF8" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingTop="4dp"
+            android:layout_marginTop="6dp"
             android:textColor="#FFCCCCCC"
-            android:text="Estado: desconectado" />
+            android:text="@string/status_disconnected" />
     </LinearLayout>
 
     <FrameLayout
@@ -77,7 +194,7 @@
         android:background="#000000"
         android:visibility="gone">
 
-        <TextureView
+        <SurfaceView
             android:id="@+id/streamSurface"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />

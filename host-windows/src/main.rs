@@ -37,23 +37,23 @@ struct HostSettings {
 
 #[derive(Clone, Debug, Serialize)]
 struct GpuInfo {
-        index: usize,
-        name: String,
-        driver_version: String,
+    index: usize,
+    name: String,
+    driver_version: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
 struct HostCapabilities {
-        encoders: Vec<String>,
-        gpus: Vec<GpuInfo>,
+    encoders: Vec<String>,
+    gpus: Vec<GpuInfo>,
 }
 
 fn canonical_encoder(value: Option<String>) -> Option<String> {
-        let raw = value?.trim().to_ascii_lowercase();
-        match raw.as_str() {
-                "h264_nvenc" | "h264_qsv" | "h264_amf" | "libx264" => Some(raw),
-                _ => None,
-        }
+    let raw = value?.trim().to_ascii_lowercase();
+    match raw.as_str() {
+        "h264_nvenc" | "h264_qsv" | "h264_amf" | "libx264" => Some(raw),
+        _ => None,
+    }
 }
 
 fn canonical_resolution(width: Option<u32>, height: Option<u32>) -> (Option<u32>, Option<u32>) {
@@ -71,7 +71,9 @@ fn canonical_resolution(width: Option<u32>, height: Option<u32>) -> (Option<u32>
 }
 
 fn canonical_bitrate_kbps(value: Option<u32>) -> Option<u32> {
-    let allowed = [3000u32, 5000u32, 10000u32, 15000u32, 25000u32, 30000u32, 50000u32];
+    let allowed = [
+        3000u32, 5000u32, 10000u32, 15000u32, 25000u32, 30000u32, 50000u32,
+    ];
     let v = value?;
     if allowed.contains(&v) {
         Some(v)
@@ -83,7 +85,9 @@ fn canonical_bitrate_kbps(value: Option<u32>) -> Option<u32> {
 fn canonical_preset(value: Option<String>) -> Option<String> {
     let v = value?.trim().to_ascii_lowercase();
     match v.as_str() {
-        "ahorro" | "equilibrado" | "alta_720p" | "fluido_900p" | "full_hd" | "full_hd_max" => Some(v),
+        "ahorro" | "equilibrado" | "alta_720p" | "fluido_900p" | "full_hd" | "full_hd_max" => {
+            Some(v)
+        }
         _ => None,
     }
 }
@@ -92,11 +96,11 @@ fn canonical_preset(value: Option<String>) -> Option<String> {
 /// Values are already macroblock-aligned (multiples of 16).
 fn resolve_preset(name: &str) -> Option<(u32, u32, u32, u32)> {
     match name {
-        "ahorro"      => Some((960,  544, 30,  5_000)),
+        "ahorro" => Some((960, 544, 30, 5_000)),
         "equilibrado" => Some((1280, 720, 60, 10_000)),
-        "alta_720p"   => Some((1280, 720, 60, 15_000)),
+        "alta_720p" => Some((1280, 720, 60, 15_000)),
         "fluido_900p" => Some((1600, 900, 60, 20_000)),
-        "full_hd"     => Some((1920, 1080, 60, 25_000)),
+        "full_hd" => Some((1920, 1080, 60, 25_000)),
         "full_hd_max" => Some((1920, 1080, 60, 35_000)),
         _ => None,
     }
@@ -127,78 +131,78 @@ fn save_host_settings_to_disk(settings: &HostSettings) {
 }
 
 fn detect_available_h264_encoders() -> Vec<String> {
-        let output = std::process::Command::new(ffmpeg_exe())
-                .arg("-hide_banner")
-                .arg("-encoders")
-                .output();
+    let output = std::process::Command::new(ffmpeg_exe())
+        .arg("-hide_banner")
+        .arg("-encoders")
+        .output();
 
-        let Ok(out) = output else {
-                return vec!["libx264".to_string()];
-        };
+    let Ok(out) = output else {
+        return vec!["libx264".to_string()];
+    };
 
-        let text = String::from_utf8_lossy(&out.stdout).to_ascii_lowercase();
-        let mut found = Vec::new();
-        for enc in ["h264_nvenc", "h264_qsv", "h264_amf", "libx264"] {
-                if text.contains(enc) {
-                        found.push(enc.to_string());
-                }
+    let text = String::from_utf8_lossy(&out.stdout).to_ascii_lowercase();
+    let mut found = Vec::new();
+    for enc in ["h264_nvenc", "h264_qsv", "h264_amf", "libx264"] {
+        if text.contains(enc) {
+            found.push(enc.to_string());
         }
-        if found.is_empty() {
-                found.push("libx264".to_string());
-        }
-        found
+    }
+    if found.is_empty() {
+        found.push("libx264".to_string());
+    }
+    found
 }
 
 fn detect_gpus() -> Vec<GpuInfo> {
-        #[derive(Debug, Deserialize)]
-        struct PsGpu {
-                #[serde(rename = "Name")]
-                name: Option<String>,
-                #[serde(rename = "DriverVersion")]
-                driver_version: Option<String>,
-        }
+    #[derive(Debug, Deserialize)]
+    struct PsGpu {
+        #[serde(rename = "Name")]
+        name: Option<String>,
+        #[serde(rename = "DriverVersion")]
+        driver_version: Option<String>,
+    }
 
-        let ps = r#"Get-CimInstance Win32_VideoController |
+    let ps = r#"Get-CimInstance Win32_VideoController |
 Select-Object Name,DriverVersion |
 ConvertTo-Json -Compress"#;
-        let output = std::process::Command::new("powershell")
-                .args(["-NoProfile", "-Command", ps])
-                .output();
+    let output = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", ps])
+        .output();
 
-        let Ok(out) = output else {
-                return Vec::new();
-        };
+    let Ok(out) = output else {
+        return Vec::new();
+    };
 
-        if out.stdout.is_empty() {
-                return Vec::new();
-        }
+    if out.stdout.is_empty() {
+        return Vec::new();
+    }
 
-        let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if text.is_empty() {
-                return Vec::new();
-        }
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if text.is_empty() {
+        return Vec::new();
+    }
 
-        let mut parsed: Vec<PsGpu> = match serde_json::from_str::<Vec<PsGpu>>(&text) {
-                Ok(v) => v,
-                Err(_) => match serde_json::from_str::<PsGpu>(&text) {
-                        Ok(one) => vec![one],
-                        Err(_) => Vec::new(),
-                },
-        };
+    let mut parsed: Vec<PsGpu> = match serde_json::from_str::<Vec<PsGpu>>(&text) {
+        Ok(v) => v,
+        Err(_) => match serde_json::from_str::<PsGpu>(&text) {
+            Ok(one) => vec![one],
+            Err(_) => Vec::new(),
+        },
+    };
 
-        parsed
-                .drain(..)
-                .enumerate()
-                .map(|(idx, g)| GpuInfo {
-                        index: idx,
-                        name: g.name.unwrap_or_else(|| "Unknown GPU".to_string()),
-                        driver_version: g.driver_version.unwrap_or_default(),
-                })
-                .collect()
+    parsed
+        .drain(..)
+        .enumerate()
+        .map(|(idx, g)| GpuInfo {
+            index: idx,
+            name: g.name.unwrap_or_else(|| "Unknown GPU".to_string()),
+            driver_version: g.driver_version.unwrap_or_default(),
+        })
+        .collect()
 }
 
 fn host_gui_html() -> &'static str {
-        r#"<!doctype html>
+    r#"<!doctype html>
 <html lang="es">
 <head>
     <meta charset="utf-8" />
@@ -364,53 +368,57 @@ loadAll();
 }
 
 fn maybe_open_gui(listen_ip: std::net::Ipv4Addr) -> Option<std::sync::mpsc::Receiver<()>> {
-        if std::env::var("TABLET_MONITOR_DISABLE_AUTO_GUI").ok().as_deref() == Some("1") {
+    if std::env::var("TABLET_MONITOR_DISABLE_AUTO_GUI")
+        .ok()
+        .as_deref()
+        == Some("1")
+    {
         return None;
-        }
-        if !cfg!(windows) {
+    }
+    if !cfg!(windows) {
         return None;
-        }
+    }
 
-        let host = if listen_ip == std::net::Ipv4Addr::UNSPECIFIED {
-                "127.0.0.1".to_string()
-        } else {
-                listen_ip.to_string()
-        };
-        let url = format!("http://{host}:9001");
+    let host = if listen_ip == std::net::Ipv4Addr::UNSPECIFIED {
+        "127.0.0.1".to_string()
+    } else {
+        listen_ip.to_string()
+    };
+    let url = format!("http://{host}:9001");
 
-        // Prefer Edge app mode for an app-like desktop window (no tabs/address bar).
-        // Fallback to default browser if Edge is unavailable.
-        let edge_paths = [
-            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-            "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-        ];
-        for edge in edge_paths {
-            if std::path::Path::new(edge).exists() {
-                let child = std::process::Command::new(edge)
-                    .arg(format!("--app={url}"))
-                    .spawn();
-                if let Ok(mut child) = child {
-                    let (tx, rx) = std::sync::mpsc::channel::<()>();
-                    std::thread::spawn(move || {
-                        let started = std::time::Instant::now();
-                        let _ = child.wait();
-                        // Some systems briefly spawn/tear-down the Edge app process while
-                        // transferring to an existing browser instance. Ignore those transient
-                        // exits so host does not stop immediately on startup.
-                        if started.elapsed() >= std::time::Duration::from_secs(3) {
-                            let _ = tx.send(());
-                        }
-                    });
-                    return Some(rx);
-                }
-                return None;
+    // Prefer Edge app mode for an app-like desktop window (no tabs/address bar).
+    // Fallback to default browser if Edge is unavailable.
+    let edge_paths = [
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    ];
+    for edge in edge_paths {
+        if std::path::Path::new(edge).exists() {
+            let child = std::process::Command::new(edge)
+                .arg(format!("--app={url}"))
+                .spawn();
+            if let Ok(mut child) = child {
+                let (tx, rx) = std::sync::mpsc::channel::<()>();
+                std::thread::spawn(move || {
+                    let started = std::time::Instant::now();
+                    let _ = child.wait();
+                    // Some systems briefly spawn/tear-down the Edge app process while
+                    // transferring to an existing browser instance. Ignore those transient
+                    // exits so host does not stop immediately on startup.
+                    if started.elapsed() >= std::time::Duration::from_secs(3) {
+                        let _ = tx.send(());
+                    }
+                });
+                return Some(rx);
             }
+            return None;
         }
+    }
 
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "", &url])
-            .spawn();
-        None
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", &url])
+        .spawn();
+    None
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -467,9 +475,11 @@ async fn main() -> anyhow::Result<()> {
         .and(stream_query_filter)
         .and(host_settings_filter.clone())
         .and(settings_reload_rx_filter.clone())
-        .map(|ws: warp::ws::Ws, query: StreamQuery, settings, reload_rx| {
-            ws.on_upgrade(move |socket| handle_h264_stream(socket, query, settings, reload_rx))
-        });
+        .map(
+            |ws: warp::ws::Ws, query: StreamQuery, settings, reload_rx| {
+                ws.on_upgrade(move |socket| handle_h264_stream(socket, query, settings, reload_rx))
+            },
+        );
 
     let input_query_filter = warp::query::<InputQuery>()
         .or(warp::any().map(InputQuery::default))
@@ -496,12 +506,10 @@ async fn main() -> anyhow::Result<()> {
             warp::reply::json(&caps)
         });
 
-    let displays_route = warp::path("displays")
-        .and(warp::get())
-        .map(|| {
-            let displays = input::list_displays().unwrap_or_else(|_| Vec::new());
-            warp::reply::json(&displays)
-        });
+    let displays_route = warp::path("displays").and(warp::get()).map(|| {
+        let displays = input::list_displays().unwrap_or_else(|_| Vec::new());
+        warp::reply::json(&displays)
+    });
 
     let settings_get_route = warp::path!("api" / "settings")
         .and(warp::get())
@@ -516,50 +524,58 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::body::json())
         .and(host_settings_filter.clone())
         .and(settings_reload_tx_filter)
-        .and_then(|incoming: HostSettings, settings: Arc<RwLock<HostSettings>>, reload_tx: watch::Sender<u64>| async move {
-            let (preferred_width, preferred_height) =
-                canonical_resolution(incoming.preferred_width, incoming.preferred_height);
-            let preferred_preset = canonical_preset(incoming.preferred_preset.clone());
-            // When a named preset is chosen, clear manual overrides so they don't
-            // shadow the preset on the next load.
-            let (eff_width, eff_height, eff_bitrate) = if preferred_preset.is_some() {
-                (None, None, None)
-            } else {
-                (preferred_width, preferred_height, canonical_bitrate_kbps(incoming.preferred_bitrate_kbps))
-            };
-            let normalized = HostSettings {
-                preferred_encoder: canonical_encoder(incoming.preferred_encoder),
-                preferred_amf_device: incoming.preferred_amf_device,
-                preferred_preset,
-                preferred_width: eff_width,
-                preferred_height: eff_height,
-                preferred_bitrate_kbps: eff_bitrate,
-            };
-            {
-                let mut write = settings.write().await;
-                *write = normalized.clone();
-            }
-            let normalized_for_background = normalized.clone();
-            let next_reload_version = *reload_tx.borrow() + 1;
-            tokio::spawn(async move {
-                let to_save = normalized_for_background.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    save_host_settings_to_disk(&to_save);
-                })
-                .await;
-                let _ = reload_tx.send(next_reload_version);
-                info!(
-                    encoder = ?normalized_for_background.preferred_encoder,
-                    amf_device = ?normalized_for_background.preferred_amf_device,
-                    preset = ?normalized_for_background.preferred_preset,
-                    width = ?normalized_for_background.preferred_width,
-                    height = ?normalized_for_background.preferred_height,
-                    bitrate_kbps = ?normalized_for_background.preferred_bitrate_kbps,
-                    "host settings updated via GUI"
-                );
-            });
-            Ok::<_, warp::Rejection>(warp::reply::json(&normalized))
-        });
+        .and_then(
+            |incoming: HostSettings,
+             settings: Arc<RwLock<HostSettings>>,
+             reload_tx: watch::Sender<u64>| async move {
+                let (preferred_width, preferred_height) =
+                    canonical_resolution(incoming.preferred_width, incoming.preferred_height);
+                let preferred_preset = canonical_preset(incoming.preferred_preset.clone());
+                // When a named preset is chosen, clear manual overrides so they don't
+                // shadow the preset on the next load.
+                let (eff_width, eff_height, eff_bitrate) = if preferred_preset.is_some() {
+                    (None, None, None)
+                } else {
+                    (
+                        preferred_width,
+                        preferred_height,
+                        canonical_bitrate_kbps(incoming.preferred_bitrate_kbps),
+                    )
+                };
+                let normalized = HostSettings {
+                    preferred_encoder: canonical_encoder(incoming.preferred_encoder),
+                    preferred_amf_device: incoming.preferred_amf_device,
+                    preferred_preset,
+                    preferred_width: eff_width,
+                    preferred_height: eff_height,
+                    preferred_bitrate_kbps: eff_bitrate,
+                };
+                {
+                    let mut write = settings.write().await;
+                    *write = normalized.clone();
+                }
+                let normalized_for_background = normalized.clone();
+                let next_reload_version = *reload_tx.borrow() + 1;
+                tokio::spawn(async move {
+                    let to_save = normalized_for_background.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        save_host_settings_to_disk(&to_save);
+                    })
+                    .await;
+                    let _ = reload_tx.send(next_reload_version);
+                    info!(
+                        encoder = ?normalized_for_background.preferred_encoder,
+                        amf_device = ?normalized_for_background.preferred_amf_device,
+                        preset = ?normalized_for_background.preferred_preset,
+                        width = ?normalized_for_background.preferred_width,
+                        height = ?normalized_for_background.preferred_height,
+                        bitrate_kbps = ?normalized_for_background.preferred_bitrate_kbps,
+                        "host settings updated via GUI"
+                    );
+                });
+                Ok::<_, warp::Rejection>(warp::reply::json(&normalized))
+            },
+        );
 
     // Default to 0.0.0.0 so Wi-Fi connections work without setting the env var.
     // USB-only mode: set TABLET_MONITOR_LISTEN=127.0.0.1 before starting.
@@ -583,7 +599,10 @@ async fn main() -> anyhow::Result<()> {
             }
             Ok(out) => {
                 let msg = String::from_utf8_lossy(&out.stderr);
-                info!("adb reverse skipped (no Android device connected): {}", msg.trim());
+                info!(
+                    "adb reverse skipped (no Android device connected): {}",
+                    msg.trim()
+                );
             }
             Err(e) => {
                 info!("adb not found, USB mode unavailable: {e}");
@@ -592,18 +611,19 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let gui_closed_rx = maybe_open_gui(listen_ip);
-    let exit_on_gui_close =
-        std::env::var("TABLET_MONITOR_EXIT_ON_GUI_CLOSE").ok().as_deref() == Some("1");
+    let exit_on_gui_close = std::env::var("TABLET_MONITOR_EXIT_ON_GUI_CLOSE")
+        .ok()
+        .as_deref()
+        == Some("1");
 
-    let routes =
-        ui_route
-            .or(health)
-            .or(capabilities_route)
-            .or(displays_route)
-            .or(settings_get_route)
-            .or(settings_post_route)
-            .or(h264_route)
-            .or(input_route);
+    let routes = ui_route
+        .or(health)
+        .or(capabilities_route)
+        .or(displays_route)
+        .or(settings_get_route)
+        .or(settings_post_route)
+        .or(h264_route)
+        .or(input_route);
 
     let shutdown_signal = async move {
         if exit_on_gui_close {
@@ -625,7 +645,6 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-
 
 /// Capture backend passed to `stream_with_ffmpeg`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -772,19 +791,23 @@ async fn handle_h264_stream(
         // Resolve active (width, height, fps, bitrate).
         // Priority: user-set preset > manual w/h override > host display size (mirror) > client query > defaults.
         // In mirror mode the host is source-of-truth for geometry so Android only renders.
-        let (preset_w, preset_h, preset_fps, preset_bitrate) = if let Some(ref pname) = settings_snapshot.preferred_preset {
-            if let Some((pw, ph, pfps, pbr)) = resolve_preset(pname) {
-                (Some(pw), Some(ph), Some(pfps), Some(pbr))
+        let (preset_w, preset_h, preset_fps, preset_bitrate) =
+            if let Some(ref pname) = settings_snapshot.preferred_preset {
+                if let Some((pw, ph, pfps, pbr)) = resolve_preset(pname) {
+                    (Some(pw), Some(ph), Some(pfps), Some(pbr))
+                } else {
+                    (None, None, None, None)
+                }
             } else {
                 (None, None, None, None)
-            }
-        } else {
-            (None, None, None, None)
-        };
+            };
 
         let (mirror_host_w, mirror_host_h) = if stream_mode.eq_ignore_ascii_case("mirror") {
             if let Ok(target) = input::resolve_display_target(display_idx) {
-                (Some(target.width().max(1) as u32), Some(target.height().max(1) as u32))
+                (
+                    Some(target.width().max(1) as u32),
+                    Some(target.height().max(1) as u32),
+                )
             } else {
                 (None, None)
             }
@@ -811,10 +834,7 @@ async fn handle_h264_stream(
         let out_w = rw.clamp(320, 3840) & !15;
         let out_h = rh.clamp(240, 2160) & !15;
         // FPS/bitrate priority: preset > query > defaults.
-        let fps = preset_fps
-            .or(query.fps)
-            .unwrap_or(60)
-            .clamp(10, 60);
+        let fps = preset_fps.or(query.fps).unwrap_or(60).clamp(10, 60);
         let bitrate = preset_bitrate
             .or(settings_snapshot.preferred_bitrate_kbps)
             .or(query.bitrate_kbps)
@@ -991,7 +1011,10 @@ async fn handle_h264_stream(
                 }
                 Err(e) => {
                     error!(encoder = %encoder, "ffmpeg stream error: {e}");
-                    if e.to_string().to_ascii_lowercase().contains("program not found") {
+                    if e.to_string()
+                        .to_ascii_lowercase()
+                        .contains("program not found")
+                    {
                         let _ = ws_tx
                             .send(Message::text(
                                 "{\"type\":\"error\",\"message\":\"FFmpeg not found. Install ffmpeg or set TABLET_MONITOR_FFMPEG\"}".to_string(),
@@ -1009,7 +1032,9 @@ async fn handle_h264_stream(
 
         if restart_requested.load(Ordering::Relaxed) {
             let _ = ws_tx.send(Message::text("RESET")).await;
-            info!("hot settings apply: closing current h264 stream so client can reconnect cleanly");
+            info!(
+                "hot settings apply: closing current h264 stream so client can reconnect cleanly"
+            );
             break;
         }
 
@@ -1027,9 +1052,10 @@ async fn handle_h264_stream(
             };
             error!(%msg, "h264 setup failed");
             let _ = ws_tx
-                .send(Message::text(
-                    format!("{{\"type\":\"error\",\"message\":\"{}\"}}", msg),
-                ))
+                .send(Message::text(format!(
+                    "{{\"type\":\"error\",\"message\":\"{}\"}}",
+                    msg
+                )))
                 .await;
             break;
         }
@@ -1175,10 +1201,7 @@ async fn stream_with_ffmpeg(
                     format!("{}x{}", target.width(), target.height()),
                 ]);
             }
-            args.extend([
-                "-i".into(),
-                "desktop".into(),
-            ]);
+            args.extend(["-i".into(), "desktop".into()]);
         }
     }
 
@@ -1304,7 +1327,12 @@ async fn stream_with_ffmpeg(
             let mut lines = tokio::io::BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 let low = line.to_ascii_lowercase();
-                if low.contains("error") || low.contains("invalid") || low.contains("could not") || low.contains("no such") || low.contains("failed") {
+                if low.contains("error")
+                    || low.contains("invalid")
+                    || low.contains("could not")
+                    || low.contains("no such")
+                    || low.contains("failed")
+                {
                     tracing::warn!(encoder = %enc_name_for_log, "ffmpeg: {}", line);
                 } else {
                     tracing::debug!(target: "ffmpeg", "{}", line);

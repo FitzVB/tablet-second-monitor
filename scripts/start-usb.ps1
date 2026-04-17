@@ -33,6 +33,7 @@ foreach ($line in ($adbOut | Select-Object -Skip 1)) {
 if ($deviceCount -gt 0) {
     Write-Host "[OK] Found $deviceCount device(s)" -ForegroundColor Green
     Write-Host "[*] Setting up USB tunnel (adb reverse)..." -ForegroundColor Cyan
+    adb reverse --remove-all | Out-Null
     adb reverse tcp:9001 tcp:9001
     Write-Host "[OK] Reverse tcp:9001 ready" -ForegroundColor Green
     Write-Host "     Tablet will use 127.0.0.1:9001" -ForegroundColor Gray
@@ -43,6 +44,39 @@ if ($deviceCount -gt 0) {
 Write-Host ""
 Write-Host "[*] Starting server..." -ForegroundColor Cyan
 
-cd "$PSScriptRoot\host-windows"
+Stop-Process -Name "host-windows" -Force -ErrorAction SilentlyContinue
+
+$portOwners = Get-NetTCPConnection -LocalPort 9001 -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique
+foreach ($ownerPid in $portOwners) {
+    if ($ownerPid -and $ownerPid -ne $PID) {
+        Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$root = Split-Path -Parent $PSScriptRoot
+cd "$root\host-windows"
+$env:TABLET_MONITOR_LISTEN = '127.0.0.1'
 $env:TABLET_MONITOR_FPS = '60'
-cargo run --release
+
+# If a stale AMF preference was persisted, clear it for USB startup stability.
+$settingsPath = Join-Path $root "host-windows\target\release\host-settings.json"
+if (Test-Path $settingsPath) {
+    try {
+        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        if ($settings.preferred_encoder -eq 'h264_amf') {
+            $settings.preferred_encoder = $null
+            $settings.preferred_amf_device = $null
+            $settings | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 $settingsPath
+            Write-Host "[INFO] Cleared persisted AMF preference for stable USB startup" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[WARN] Could not parse host-settings.json; continuing with runtime fallback" -ForegroundColor Yellow
+    }
+}
+
+if (Test-Path ".\target\release\host-windows.exe") {
+    .\target\release\host-windows.exe
+} else {
+    cargo run --release
+}
