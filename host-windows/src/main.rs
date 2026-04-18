@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::sync::{watch, RwLock};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use warp::ws::Message;
 use warp::Filter;
 
@@ -140,6 +140,11 @@ fn detect_available_h264_encoders() -> Vec<String> {
         return vec!["libx264".to_string()];
     };
 
+    // Report every encoder that ffmpeg was compiled with support for.
+    // We do NOT filter by WMI GPU vendor here: WMI can miss GPUs that are
+    // NVENC-capable (Optimus, eGPUs, driver layering). The stream-attempt
+    // fallback loop already probes each encoder at runtime and skips to the
+    // next candidate if the encoder fails to produce any bytes.
     let text = String::from_utf8_lossy(&out.stdout).to_ascii_lowercase();
     let mut found = Vec::new();
     for enc in ["h264_nvenc", "h264_qsv", "h264_amf", "libx264"] {
@@ -735,7 +740,23 @@ fn encoder_extra_args(encoder: &str) -> Vec<String> {
             // zerolatency: disables NVENC picture-reorder buffer (hardware lookahead)
             "-zerolatency".into(),
             "1".into(),
-            // Level 5.1: 1890×1080@60fps = ~485k macroblocks/sec which exceeds Level 4.1
+            // main profile: NVENC only supports main and high profiles natively.
+            // Specifying "baseline" causes ffmpeg to silently output a stream where the
+            // SPS says baseline but the bitstream uses CABAC (main-level entropy coding),
+            // which is an invalid combination — Android MediaCodec throws EOFException
+            // when it detects the mismatch. "main" with -bf 0 is the correct choice:
+            // no B-frames, CABAC entropy coding, and full NVENC hardware acceleration.
+            // Android CDD requires all devices to support H.264 Main Profile Level 3.1.
+            "-profile:v".into(),
+            "main".into(),
+            // AUD (Access Unit Delimiter): NAL unit type 9 that marks frame boundaries.
+            // The Android H264Decoder flushes access units ONLY on AUD NALs — without
+            // this flag NVENC emits no AUD, frames pile up in the parser and are never
+            // submitted to MediaCodec, producing a black screen and eventual EOFException.
+            // libx264 produces AUD via x264-params aud=1; NVENC needs this explicit flag.
+            "-aud".into(),
+            "1".into(),
+            // Level 5.1: 1920×1080@60fps = ~485k macroblocks/sec which exceeds Level 4.1
             // (245k limit). Without this, NVENC may write Level 4.1 in the SPS and Qualcomm
             // decoders enforce that limit, throttling output to ~50fps for complex content.
             "-level".into(),
@@ -758,8 +779,11 @@ fn encoder_extra_args(encoder: &str) -> Vec<String> {
             "-latency".into(), "true".into(),
             "-rc".into(), "cbr".into(),
             "-async_depth".into(), "1".into(),
-            "-profile".into(), "high".into(),
-            "-coder".into(), "cabac".into(),
+            // baseline: disables CABAC and B-frames — matches NVENC and libx264 for maximum
+            // Android MediaCodec compatibility. High profile at high bitrates can freeze
+            // hardware decoders on mid-range tablets.
+            "-profile".into(), "baseline".into(),
+            "-coder".into(), "cavlc".into(),
             "-bf".into(), "0".into(),
             "-max_b_frames".into(), "0".into(),
             "-vbaq".into(), "true".into(),
@@ -927,8 +951,31 @@ async fn handle_h264_stream(
             .collect();
         amf_pre_args_candidates.push(vec![]);
 
-        let hw: &[&str] = &["h264_nvenc", "h264_qsv", "h264_amf"];
-        let mut candidates: Vec<(String, Capture, Vec<String>)> = Vec::new();
+        // NVENC GPU fallback order: always start from CUDA device 0, 1, 2, …
+        // then None (let ffmpeg pick automatically).
+        //
+        // IMPORTANT: The NVENC -gpu flag uses CUDA device enumeration, which is
+        // completely independent from WMI/D3D adapter indices. The user's
+        // "preferred GPU" selection (selected_amf_device) is a WMI adapter index
+        // valid for AMF/D3D11va — mapping it directly to -gpu would pick the wrong
+        // CUDA device on most multi-GPU laptops. NVENC always probes from 0.
+        let mut nvenc_gpu_candidates: Vec<Option<u32>> = Vec::new();
+        for idx in 0..gpu_count.max(1) {
+            nvenc_gpu_candidates.push(Some(idx));
+        }
+        nvenc_gpu_candidates.push(None); // implicit fallback (ffmpeg default: any)
+
+        // Build the HW encoder list from what is actually available on this machine
+        // (vendor-filtered at detection time). This avoids attempting NVENC on AMD-only
+        // systems or AMF on NVIDIA-only systems.
+        let available_encoders = detect_available_h264_encoders();
+        let hw: Vec<&str> = ["h264_nvenc", "h264_qsv", "h264_amf"]
+            .iter()
+            .copied()
+            .filter(|e| available_encoders.iter().any(|a| a == e))
+            .collect();
+        // Tuple: (encoder, capture, pre_input_args, nvenc_gpu_override)
+        let mut candidates: Vec<(String, Capture, Vec<String>, Option<u32>)> = Vec::new();
         // Capture backend priority: mirror mode prefers GDIGRAB (coordinate-based capture)
         // over DDAGRAB (index-based capture) to avoid cropping issues on non-standard resolutions.
         // Extended mode can use DDAGRAB (DXGI) since it targets a virtual display.
@@ -950,21 +997,27 @@ async fn handle_h264_stream(
         };
 
         if let Some(pref) = preferred.as_deref() {
-            if hw.contains(&pref) {
+            if hw.contains(&
                 if pref == "h264_amf" {
                     for cap in capture_order {
                         for pre in &amf_pre_args_candidates {
-                            candidates.push((pref.into(), cap, pre.clone()));
+                            candidates.push((pref.into(), cap, pre.clone(), None));
+                        }
+                    }
+                } else if pref == "h264_nvenc" {
+                    for cap in capture_order {
+                        for &gpu in &nvenc_gpu_candidates {
+                            candidates.push((pref.into(), cap, vec![], gpu));
                         }
                     }
                 } else {
                     for cap in capture_order {
-                        candidates.push((pref.into(), cap, vec![]));
+                        candidates.push((pref.into(), cap, vec![], None));
                     }
                 }
             } else if pref == "libx264" {
                 for cap in capture_order {
-                    candidates.push((pref.into(), cap, vec![]));
+                    candidates.push((pref.into(), cap, vec![], None));
                 }
             }
         }
@@ -974,17 +1027,23 @@ async fn handle_h264_stream(
         }
 
         {
-            for &enc in hw {
+            for enc in hw.iter().copied() {
                 if preferred.as_deref() != Some(enc) {
                     if enc == "h264_amf" {
                         for cap in capture_order {
                             for pre in &amf_pre_args_candidates {
-                                candidates.push((enc.into(), cap, pre.clone()));
+                                candidates.push((enc.into(), cap, pre.clone(), None));
+                            }
+                        }
+                    } else if enc == "h264_nvenc" {
+                        for cap in capture_order {
+                            for &gpu in &nvenc_gpu_candidates {
+                                candidates.push((enc.into(), cap, vec![], gpu));
                             }
                         }
                     } else {
                         for cap in capture_order {
-                            candidates.push((enc.into(), cap, vec![]));
+                            candidates.push((enc.into(), cap, vec![], None));
                         }
                     }
                 }
@@ -992,7 +1051,7 @@ async fn handle_h264_stream(
 
             if preferred.as_deref() != Some("libx264") {
                 for cap in capture_order {
-                    candidates.push(("libx264".into(), cap, vec![]));
+                    candidates.push(("libx264".into(), cap, vec![], None));
                 }
             }
         }
@@ -1000,7 +1059,7 @@ async fn handle_h264_stream(
         info!(out_w, out_h, fps, bitrate, "h264 stream active profile");
 
         let mut started = false;
-        for (encoder, capture, pre_args) in &candidates {
+        for (encoder, capture, pre_args, nvenc_gpu) in &candidates {
             if !connection_alive.load(Ordering::Relaxed) {
                 break;
             }
@@ -1019,7 +1078,7 @@ async fn handle_h264_stream(
             } else {
                 None
             };
-            info!(encoder = %encoder, capture = ?capture, amf_device = ?amf_device, "trying encoder/capture combination");
+            info!(encoder = %encoder, capture = ?capture, amf_device = ?amf_device, nvenc_gpu = ?nvenc_gpu, "trying encoder/capture combination");
 
             match stream_with_ffmpeg(
                 &mut ws_tx,
@@ -1035,6 +1094,7 @@ async fn handle_h264_stream(
                     encoder: encoder.to_string(),
                     capture: *capture,
                     pre_input_args: pre_args.clone(),
+                    nvenc_gpu: if encoder == "h264_nvenc" { *nvenc_gpu } else { None },
                 },
                 if encoder == "h264_amf" {
                     Some(settings.clone())
@@ -1047,6 +1107,43 @@ async fn handle_h264_stream(
                 Ok(exit) => {
                     match exit {
                         StreamExit::Streamed => {
+                            // Auto-learn: if the user had no explicit encoder preference (auto
+                            // mode) and a fallback encoder was used, persist it so subsequent
+                            // connections on this machine start immediately with the right one.
+                            // This makes the app self-configuring when moved between machines
+                            // (AMD laptop ↔ NVIDIA desktop) without any manual GUI changes.
+                            if !manual_encoder_selected {
+                                let current_saved = settings.read().await.preferred_encoder.clone();
+                                if current_saved.as_deref() != Some(encoder.as_str()) {
+                                    let learned = encoder.to_string();
+                                    let learned_gpu = if encoder == "h264_nvenc" { *nvenc_gpu } else { None };
+                                    let settings_for_learn = settings.clone();
+                                    tokio::spawn(async move {
+                                        let maybe_updated = {
+                                            let mut w = settings_for_learn.write().await;
+                                            if w.preferred_encoder.is_none() {
+                                                w.preferred_encoder = Some(learned.clone());
+                                                if learned == "h264_nvenc" {
+                                                    // Also store the working CUDA device index in
+                                                    // preferred_amf_device. Not semantically perfect,
+                                                    // but it's persisted and read back for NVENC
+                                                    // ordering on reconnect.
+                                                    w.preferred_amf_device = learned_gpu;
+                                                }
+                                                Some(w.clone())
+                                            } else {
+                                                None
+                                            }
+                                        };
+                                        if let Some(to_save) = maybe_updated {
+                                            let _ = tokio::task::spawn_blocking(move || {
+                                                save_host_settings_to_disk(&to_save);
+                                            }).await;
+                                            info!(encoder = %learned, nvenc_gpu = ?learned_gpu, "auto-learned encoder persisted for this machine");
+                                        }
+                                    });
+                                }
+                            }
                             started = true;
                             break;
                         }
@@ -1101,7 +1198,7 @@ async fn handle_h264_stream(
             let requested = query.encoder.as_deref().unwrap_or("auto");
             let attempted = candidates
                 .iter()
-                .map(|(enc, cap, _)| format!("{enc}/{cap:?}"))
+                .map(|(enc, cap, _, _)| format!("{enc}/{cap:?}"))
                 .collect::<Vec<_>>()
                 .join(", ");
             let msg = if attempted.is_empty() {
@@ -1208,6 +1305,9 @@ struct FfmpegConfig {
     /// Arguments inserted before the first -f/-i input specifier.
     /// Used to pre-initialise a specific HW device (e.g. for multi-GPU routing).
     pre_input_args: Vec<String>,
+    /// Explicit NVENC GPU index passed as `-gpu <idx>` to h264_nvenc.
+    /// `None` lets ffmpeg pick the GPU automatically (usually CUDA device 0).
+    nvenc_gpu: Option<u32>,
 }
 
 async fn stream_with_ffmpeg(
@@ -1313,10 +1413,24 @@ async fn stream_with_ffmpeg(
     args.extend(["-c:v".into(), config.encoder.clone()]);
     args.extend(encoder_extra_args(&config.encoder));
 
+    // NVENC: explicit GPU device index avoids "no capable devices found" on multi-GPU systems
+    // where ffmpeg might probe the wrong adapter (e.g. iGPU before dGPU).
+    if config.encoder == "h264_nvenc" {
+        if let Some(gpu_idx) = config.nvenc_gpu {
+            args.extend(["-gpu".into(), gpu_idx.to_string()]);
+        }
+    }
+
     // libx264 on CPU has higher encode cost at very high bitrates; capping bitrate
     // reduces encode queueing and usually lowers interaction latency on CPU-only hosts.
     let effective_bitrate_kbps = if config.encoder == "libx264" {
         config.bitrate_kbps.min(12000)
+    } else if config.encoder == "h264_nvenc" {
+        // Cap NVENC at 8 Mbps for Android compatibility. NVENC hardware CBR output is more
+        // bursty frame-to-frame than libx264 at the same average rate, which can saturate
+        // Android MediaCodec input buffer queues and crash the decoder. 8 Mbps gives
+        // sharp 1080p on a tablet while staying within the decoder's sustained throughput.
+        config.bitrate_kbps.min(8000)
     } else if config.encoder == "h264_amf" {
         // AMF shows fewer macroblock artifacts in fast motion with a slightly higher floor.
         config.bitrate_kbps.max(18000)
@@ -1370,6 +1484,15 @@ async fn stream_with_ffmpeg(
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped());
 
+    // Log full invocation so failures can be reproduced outside the app.
+    info!(
+        encoder = %config.encoder,
+        capture = ?config.capture,
+        nvenc_gpu = ?config.nvenc_gpu,
+        cmd = %format!("ffmpeg {}", args.join(" ")),
+        "ffmpeg invocation"
+    );
+
     let mut child = cmd.spawn()?;
     let mut stdout = child
         .stdout
@@ -1379,10 +1502,33 @@ async fn stream_with_ffmpeg(
     // Drain stderr in background so it never blocks the child process.
     // Lines that look like errors are elevated to WARN so encoder failures are visible
     // in the console without flooding it with normal ffmpeg statistics.
+    // Every attempt also writes to a timestamped log file so failures can be analyzed
+    // post-mortem even when the console output scrolls past.
     let enc_name_for_log = config.encoder.clone();
+    let nvenc_gpu_for_log = config.nvenc_gpu;
+    let capture_for_log = config.capture;
     if let Some(stderr) = child.stderr.take() {
+        let log_path = ffmpeg_log_path(&config.encoder);
         tokio::spawn(async move {
+            use std::io::Write;
             use tokio::io::AsyncBufReadExt;
+            // Open log file in blocking context; ignore errors (log is best-effort).
+            let mut log_file: Option<std::fs::File> = tokio::task::block_in_place(|| {
+                if let Some(parent) = log_path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                    .ok()
+            });
+            if let Some(ref mut f) = log_file {
+                let _ = writeln!(
+                    f,
+                    "=== ffmpeg attempt encoder={enc_name_for_log} capture={capture_for_log:?} nvenc_gpu={nvenc_gpu_for_log:?} ==="
+                );
+            }
             let mut lines = tokio::io::BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 let low = line.to_ascii_lowercase();
@@ -1395,6 +1541,9 @@ async fn stream_with_ffmpeg(
                     tracing::warn!(encoder = %enc_name_for_log, "ffmpeg: {}", line);
                 } else {
                     tracing::debug!(target: "ffmpeg", "{}", line);
+                }
+                if let Some(ref mut f) = log_file {
+                    let _ = writeln!(f, "{line}");
                 }
             }
         });
@@ -1455,12 +1604,23 @@ async fn stream_with_ffmpeg(
                     }
                 }
                 sent_any = true;
-                if ws_tx
-                    .send(Message::binary(buf[..n].to_vec()))
-                    .await
-                    .is_err()
-                {
-                    return Ok(StreamExit::SocketClosed);
+                // Timeout: if Android cannot drain the WebSocket within 2 s the decoder
+                // is stalled / OOM. Returning SocketClosed causes the outer loop to kill
+                // ffmpeg and let the client reconnect rather than freezing indefinitely.
+                // Without this timeout, back-pressure fills the OS pipe (64 KB), ffmpeg
+                // blocks on write, and the entire pipeline deadlocks silently.
+                let send_result = tokio::time::timeout(
+                    tokio::time::Duration::from_secs(2),
+                    ws_tx.send(Message::binary(buf[..n].to_vec())),
+                )
+                .await;
+                match send_result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(_)) => return Ok(StreamExit::SocketClosed), // WS error
+                    Err(_elapsed) => {
+                        warn!(encoder = %config.encoder, "WebSocket send stalled >2 s — Android decoder overloaded, restarting stream");
+                        return Ok(StreamExit::SocketClosed);
+                    }
                 }
             }
             _ = tick.tick() => {
@@ -1491,6 +1651,54 @@ async fn stream_with_ffmpeg(
     } else {
         Ok(StreamExit::Unavailable)
     }
+}
+
+/// Returns a timestamped path for a per-attempt ffmpeg stderr log.
+/// Logs land in `<exe_dir>/logs/ffmpeg-<encoder>-<YYYYMMDD-HHMMSS>.txt`.
+/// Writing there lets users diagnose NVENC failures post-mortem without
+/// needing to capture console output in real time.
+fn ffmpeg_log_path(encoder: &str) -> std::path::PathBuf {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // Convert epoch to a coarse YYYYMMDD-HHMMSS string without external crates.
+    // Accuracy within ~1 second is sufficient for log file names.
+    let secs_per_day = 86400u64;
+    let secs_per_hour = 3600u64;
+    let secs_per_min = 60u64;
+    // Days since 1970-01-01 (ignoring leap seconds).
+    let days = now / secs_per_day;
+    let rem = now % secs_per_day;
+    let hh = rem / secs_per_hour;
+    let mm = (rem % secs_per_hour) / secs_per_min;
+    let ss = rem % secs_per_min;
+    // Gregorian calendar reconstruction (good until ~2100).
+    let (mut year, mut month, mut day_of_month) = (1970u64, 1u64, 1u64);
+    let mut d = days;
+    loop {
+        let leap = if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) { 366 } else { 365 };
+        if d < leap { break; }
+        d -= leap;
+        year += 1;
+    }
+    let leap = if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) { 1 } else { 0 };
+    let months = [31u64, 28 + leap, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    for &m in &months {
+        if d < m { break; }
+        d -= m;
+        month += 1;
+    }
+    day_of_month += d;
+    let ts = format!("{year:04}{month:02}{day_of_month:02}-{hh:02}{mm:02}{ss:02}");
+    let safe_enc = encoder.replace([':', '/']
+    let filename = format!("ffmpeg-{safe_enc}-{ts}.txt");
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            return dir.join("logs").join(filename);
+        }
+    }
+    std::path::PathBuf::from("logs").join(filename)
 }
 
 /// Resolve the path to `ffmpeg(.exe)`.

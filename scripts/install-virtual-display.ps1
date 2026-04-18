@@ -35,7 +35,10 @@ if ($Provider -eq "winget") {
     Write-Host "Installing Virtual Display Driver from winget..." -ForegroundColor Cyan
     winget install --id VirtualDrivers.Virtual-Display-Driver -e --accept-package-agreements --accept-source-agreements
 
-    if ($LASTEXITCODE -ne 0) {
+    # winget exits 0 on fresh install, but exits 1 with "No update available" when the
+    # package is already installed at the latest version. Both outcomes mean VDD is present.
+    # Treat exit code 1 as a soft-success and let the caller re-check via Get-PnpDevice.
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {
         throw "winget devolvio codigo $LASTEXITCODE"
     }
 

@@ -2,6 +2,65 @@
 
 Turn an Android device into a touch-enabled second monitor for Windows over USB (recommended) or Wi-Fi.
 
+## Minimum Requirements
+
+### Windows PC (host)
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| OS | Windows 10 64-bit (build 1903+) | Windows 10/11 22H2+ |
+| CPU | Any x64 with SSE2 | 4-core / 8-thread or better |
+| RAM | 4 GB | 8 GB+ |
+| GPU | Any (software `libx264` fallback) | NVIDIA GTX 1060+ **or** AMD RX 580+ **or** Intel Gen 6+ iGPU |
+| Driver — NVIDIA (NVENC) | Game Ready 452.39+ / Studio 452.06+ | Latest Game Ready |
+| Driver — AMD (AMF) | Adrenalin 21.4.1+ | Latest Adrenalin |
+| Driver — Intel (QSV) | DCH Graphics 27.20+ | Latest |
+| FFmpeg | 6.0+ (bundled automatically) | 7.x release-essentials |
+| ADB | Platform-tools 31+ (bundled automatically) | Latest |
+| USB cable | USB 2.0 | USB 3.0 (reduces latency to ≤ 5 ms) |
+| Visual C++ Runtime | 2019 Redistributable | 2022 Redistributable |
+
+> **Software fallback:** No GPU hardware encoder required. The host automatically falls back to `libx264` (CPU H.264 encoding) on any machine. Hardware encoding is faster and uses less CPU — it is detected and selected automatically at startup.
+
+> **Encoder auto-learn:** On first successful stream the host saves the working encoder to `host-settings.json`. Subsequent launches on the same machine skip the probe entirely.
+
+### Android device (client)
+
+| Component | Minimum |
+|-----------|---------|
+| Android version | 7.0 Nougat (API 24) |
+| H.264 decoder | Hardware AVC decoder (present on virtually all devices since 2012) |
+| H.264 profile | Main Profile Level 3.1 (Android CDD requirement — guaranteed on all devices) |
+| Network | USB 2.0 cable **or** Wi-Fi 802.11n (5 GHz strongly recommended) |
+| Screen | Any resolution — host scales output automatically |
+| RAM | 1 GB free | 2 GB+ |
+
+> **Tested tablets:** Samsung Galaxy Tab S series, Lenovo Tab P series, Fire HD 10 (with Play Store). Any Android 7+ tablet with a hardware H.264 decoder will work.
+
+---
+
+### Encoder compatibility matrix
+
+| Encoder | Hardware required | Bitrate used | Typical latency | Auto-selection order |
+|---------|------------------|--------------|-----------------|----------------------|
+| `h264_nvenc` | NVIDIA GPU (Kepler+, GTX 600 / RTX series) | 8 Mbps | ≤ 5 ms encode | 1st — if NVIDIA GPU detected |
+| `h264_qsv` | Intel CPU with Quick Sync (Haswell 4th gen+) | configurable | ≤ 10 ms encode | 2nd — if Intel iGPU detected |
+| `h264_amf` | AMD GPU (GCN 1st gen+, RX 400 series+) | configurable | ≤ 10 ms encode | 3rd — if AMD GPU detected |
+| `libx264` | None — pure CPU | 12 Mbps max | 15–40 ms encode | Always last / guaranteed fallback |
+
+**NVENC technical notes (RTX / GTX):**
+- Uses H.264 **Main Profile** + AUD NAL units for maximum Android MediaCodec compatibility.
+- B-frames disabled (`-bf 0`), CBR mode, zero-latency tuning — optimised for live streaming, not file encoding.
+- Bitrate capped at 8 Mbps to stay within Android hardware decoder input buffer limits.
+
+**AMD AMF technical notes:**
+- Uses H.264 **Baseline Profile** for broad Android compatibility.
+- CBR low-latency mode with async depth 1.
+
+The host probes each encoder at startup. If the preferred encoder produces zero output for 2+ seconds, the next candidate is tried automatically — **no manual action needed.**
+
+---
+
 ## Current status
 
 - Touch input on extended monitor: fixed.
@@ -256,6 +315,22 @@ It is **close**, but still not 100% zero-friction.
 - Add first-run setup wizard with automatic checks.
 
 ## Development
+
+### NVENC / Hardware encoder troubleshooting
+
+If `h264_nvenc` is selected in the GUI but the stream does not start:
+
+1. Check the NVIDIA driver version — NVENC requires **452.39+** (Game Ready) or **452.06+** (Studio).
+   Older drivers (e.g., 390.x) expose NVENC in `ffmpeg -encoders` but fail at runtime.
+2. Run the diagnostic script to confirm NVENC works outside the app:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -NoProfile -File .\scripts\collect-nvenc-diagnostics.ps1
+   ```
+   Output is saved to `logs\nvenc-diagnostic-<timestamp>.txt`.
+3. Check `logs\ffmpeg-h264_nvenc-<timestamp>.txt` — every stream attempt writes full ffmpeg stderr there, including the exact error message from NVENC.
+4. On multi-GPU systems (e.g., laptop with iGPU + dGPU), the host now tries each GPU index automatically (`-gpu 0`, `-gpu 1`, …). If one index fails, the next is tried before falling back to a software encoder.
+5. Force a specific GPU from the GUI: open `http://127.0.0.1:9001`, select the encoder and the GPU adapter, click **Save and apply**.
+6. If all NVENC attempts fail, the host falls back to `libx264` transparently — video will still work, just with higher CPU usage.
 
 ### Android
 

@@ -16,75 +16,106 @@ function Test-IsAdmin {
     try {
         $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    } catch {
+    }
+    catch {
         return $false
     }
 }
 
 function Test-VirtualDisplayDriverInstalled {
+    # Match any indirect display adapter installed as ROOT\DISPLAY (all VDD variants)
+    # or by known friendly name patterns used across different VDD package versions.
     $driverPresent = Get-PnpDevice -Class Display -ErrorAction SilentlyContinue |
-        Where-Object { $_.FriendlyName -eq "Virtual Display Driver" }
-    if ($driverPresent) {
-        return $true
+    Where-Object {
+        $_.InstanceId -like 'ROOT\DISPLAY\*' -or
+        $_.FriendlyName -like '*Virtual*Display*' -or
+        $_.FriendlyName -like '*Virtual*Monitor*' -or
+        $_.FriendlyName -like '*VDD*'
     }
+    if ($driverPresent) { return $true }
 
     $monitorPresent = Get-PnpDevice -Class Monitor -ErrorAction SilentlyContinue |
-        Where-Object { $_.FriendlyName -like "*VDD by MTT*" }
-    return $null -ne $monitorPresent
+    Where-Object { $_.FriendlyName -like '*VDD*' -or $_.FriendlyName -like '*Virtual*' }
+    return ($null -ne $monitorPresent)
 }
 
 function Ensure-VirtualDisplayDriver {
-    Write-Host "[*] Checking virtual display driver..." -ForegroundColor Cyan
+    Write-Host '[*] Checking virtual display driver...' -ForegroundColor Cyan
 
     if (Test-VirtualDisplayDriverInstalled) {
-        Write-Host "[OK] Virtual display driver detected" -ForegroundColor Green
+        # Device found - check if it's in error state and try to re-enable it.
+        $errDevice = Get-PnpDevice -Class Display -ErrorAction SilentlyContinue |
+        Where-Object {
+            ($_.InstanceId -like 'ROOT\DISPLAY\*' -or
+            $_.FriendlyName -like '*Virtual*Display*' -or
+            $_.FriendlyName -like '*Virtual*Monitor*' -or
+            $_.FriendlyName -like '*VDD*') -and
+            $_.Status -eq 'Error'
+        }
+        if ($errDevice) {
+            Write-Host '[WARN] Virtual display device is in error state - attempting to re-enable...' -ForegroundColor Yellow
+            try {
+                $errDevice | Enable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue
+                Write-Host '[OK] Virtual display device re-enabled' -ForegroundColor Green
+            }
+            catch {
+                Write-Host "[WARN] Could not re-enable device: $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host '       Try: Device Manager -> Display adapters -> Enable "Virtual Desktop Monitor"' -ForegroundColor DarkYellow
+            }
+        }
+        else {
+            Write-Host '[OK] Virtual display driver detected' -ForegroundColor Green
+        }
         return
     }
 
-    Write-Host "[WARN] Virtual display support is not installed yet." -ForegroundColor Yellow
-    Write-Host "       Extended mode needs this component." -ForegroundColor Yellow
+    Write-Host '[WARN] Virtual display support is not installed yet.' -ForegroundColor Yellow
+    Write-Host '       Extended mode needs this component.' -ForegroundColor Yellow
 
     if (-not (Test-Path $installVddScript)) {
-        Write-Host "[ERROR] scripts\install-virtual-display.ps1 not found" -ForegroundColor Red
-        Write-Host "        Install VDD manually before using Extended mode." -ForegroundColor Red
+        Write-Host '[ERROR] scripts\install-virtual-display.ps1 not found' -ForegroundColor Red
+        Write-Host '        Install VDD manually before using Extended mode.' -ForegroundColor Red
         return
     }
 
-    Write-Host "[*] Installing virtual display support..." -ForegroundColor Cyan
+    Write-Host '[*] Installing virtual display support...' -ForegroundColor Cyan
     try {
         & $installVddScript
-    } catch {
+    }
+    catch {
         Write-Host "[WARN] First install attempt failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
     if (Test-VirtualDisplayDriverInstalled) {
-        Write-Host "[OK] Virtual display driver installed" -ForegroundColor Green
+        Write-Host '[OK] Virtual display driver installed' -ForegroundColor Green
         return
     }
 
     if (-not (Test-IsAdmin)) {
-        Write-Host "[*] Retrying with Administrator permissions (UAC prompt)..." -ForegroundColor Cyan
+        Write-Host '[*] Retrying with Administrator permissions (UAC prompt)...' -ForegroundColor Cyan
         try {
-            $proc = Start-Process -FilePath "powershell.exe" -Verb RunAs -Wait -PassThru -ArgumentList @(
-                "-ExecutionPolicy", "Bypass",
-                "-NoProfile",
-                "-File", ('"' + $installVddScript + '"')
+            $proc = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList @(
+                '-ExecutionPolicy', 'Bypass',
+                '-NoProfile',
+                '-File', $installVddScript
             )
             if ($proc.ExitCode -ne 0) {
                 Write-Host "[WARN] Admin install exited with code $($proc.ExitCode)." -ForegroundColor Yellow
             }
-        } catch {
-            Write-Host "[WARN] Could not run elevated install automatically." -ForegroundColor Yellow
+        }
+        catch {
+            Write-Host '[WARN] Could not run elevated install automatically.' -ForegroundColor Yellow
         }
     }
 
     if (Test-VirtualDisplayDriverInstalled) {
-        Write-Host "[OK] Virtual display driver installed" -ForegroundColor Green
-    } else {
-        Write-Host "[WARN] Virtual display support is still not detected." -ForegroundColor Yellow
-        Write-Host "       You can continue in Mirror mode, or install manually:" -ForegroundColor Yellow
-        Write-Host "       .\scripts\install-virtual-display.ps1" -ForegroundColor DarkYellow
-        Write-Host "       If Windows still does not show displays, reboot once." -ForegroundColor DarkYellow
+        Write-Host '[OK] Virtual display driver installed' -ForegroundColor Green
+    }
+    else {
+        Write-Host '[WARN] Virtual display support is still not detected.' -ForegroundColor Yellow
+        Write-Host '       You can continue in Mirror mode, or install manually:' -ForegroundColor Yellow
+        Write-Host '       .\scripts\install-virtual-display.ps1' -ForegroundColor DarkYellow
+        Write-Host '       If Windows still does not show displays, reboot once.' -ForegroundColor DarkYellow
     }
 }
 
@@ -94,7 +125,8 @@ if (Test-Path $ensureRuntimeScript) {
     Write-Host "[*] Checking local runtime (ADB/FFmpeg)..." -ForegroundColor Cyan
     try {
         & $ensureRuntimeScript -RootPath $root -EnsureAdb -EnsureFfmpeg
-    } catch {
+    }
+    catch {
         Write-Host "[WARN] Runtime bootstrap failed: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Host "       START can continue, but USB/Wi-Fi may fail without dependencies." -ForegroundColor Yellow
     }
@@ -116,7 +148,8 @@ if ($mode -eq "usb") {
         exit 1
     }
     & $usbScript
-} else {
+}
+else {
     Write-Host ""
     Write-Host "[INFO] Wi-Fi mode selected" -ForegroundColor Cyan
     if (-not (Test-Path $wifiScript)) {

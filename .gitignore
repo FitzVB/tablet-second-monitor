@@ -34,9 +34,15 @@ dist/
 tm_*.png
 tm_ui*.xml
 
+# Host runtime settings — machine-specific (encoder learned per-device)
+# Do not commit: each machine learns its own best encoder automatically.
+host-settings.json
+**/host-settings.json
+
 # Local identity (do not commit)
 identity.local.md
 graphic_identity.md
+CHAT_CONTEXT_HANDOFF.md
 FlexDisplay_Logo.png
 android-client/app/src/main/res/drawable/flexdisplay_logo.png
 

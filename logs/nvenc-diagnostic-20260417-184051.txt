@@ -1,0 +1,572 @@
+﻿
+============================================================
+Context
+============================================================
+Timestamp: 2026-04-17T18:40:51.9440433-06:00
+RepoRoot: C:\Users\frige\Documents\tablet-second-monitor
+Host: LAPTOP-KA2LIDI6
+User: frige
+PSVersion: 5.1.26100.8115
+TABLET_MONITOR_FFMPEG: 
+
+============================================================
+OS
+============================================================
+
+
+WindowsProductName         : Windows 10 Home
+WindowsVersion             : 2009
+OsBuildNumber              : 26200
+OsHardwareAbstractionLayer : 10.0.26100.1
+
+
+
+
+
+============================================================
+GPU
+============================================================
+
+Name                    DriverVersion   AdapterRAM VideoProcessor                        
+----                    -------------   ---------- --------------                        
+Virtual Display Driver  11.30.4.434                                                      
+AMD Radeon(TM) RX 6550M 32.0.21043.5001 4278190080 AMD Radeon Graphics Processor (0x743F)
+AMD Radeon(TM) Graphics 32.0.21043.5001 536870912  AMD Radeon Graphics Processor (0x1681)
+
+
+
+
+============================================================
+nvidia-smi
+============================================================
+nvidia-smi not found in PATH
+
+============================================================
+FFmpeg resolve
+============================================================
+Using ffmpeg: C:\Users\frige\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe
+
+============================================================
+ffmpeg -version
+============================================================
+COMMAND: C:\Users\frige\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe -hide_banner -version
+ffmpeg version 8.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers
+built with gcc 15.2.0 (Rev11, Built by MSYS2 project)
+configuration: --enable-gpl --enable-version3 --enable-static --disable-w32threads --disable-autodetect --enable-cairo --enable-fontconfig --enable-iconv --enable-gnutls --enable-lcms2 --enable-libxml2 --enable-gmp --enable-bzlib --enable-lzma --enable-libsnappy --enable-zlib --enable-librist --enable-libsrt --enable-libssh --enable-libzmq --enable-avisynth --enable-libbluray --enable-libcaca --enable-libdvdnav --enable-libdvdread --enable-sdl2 --enable-libaribb24 --enable-libaribcaption --enable-libdav1d --enable-libdavs2 --enable-libopenjpeg --enable-libquirc --enable-libuavs3d --enable-libxevd --enable-libzvbi --enable-liboapv --enable-libqrencode --enable-librav1e --enable-libsvtav1 --enable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxavs2 --enable-libxeve --enable-libxvid --enable-libaom --enable-libjxl --enable-libsvtjpegxs --enable-libvpx --enable-mediafoundation --enable-libass --enable-frei0r --enable-libfreetype --enable-libfribidi --enable-libharfbuzz --enable-liblensfun --enable-libvidstab --enable-libvmaf --enable-libzimg --enable-amf --enable-cuda-llvm --enable-cuvid --enable-dxva2 --enable-d3d11va --enable-d3d12va --enable-ffnvcodec --enable-libvpl --enable-nvdec --enable-nvenc --enable-vaapi --enable-libshaderc --enable-vulkan --enable-libplacebo --enable-opencl --enable-libcdio --enable-openal --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopencore-amrwb --enable-libmp3lame --enable-libshine --enable-libtheora --enable-libtwolame --enable-libvo-amrwbenc --enable-libcodec2 --enable-libilbc --enable-libgsm --enable-liblc3 --enable-libopencore-amrnb --enable-libopus --enable-libspeex --enable-libvorbis --enable-ladspa --enable-libbs2b --enable-libflite --enable-libmysofa --enable-librubberband --enable-libsoxr --enable-chromaprint --enable-whisper
+libavutil      60. 26.100 / 60. 26.100
+libavcodec     62. 28.100 / 62. 28.100
+libavformat    62. 12.100 / 62. 12.100
+libavdevice    62.  3.100 / 62.  3.100
+libavfilter    11. 14.100 / 11. 14.100
+libswscale      9.  5.100 /  9.  5.100
+libswresample   6.  3.100 /  6.  3.100
+
+Exiting with exit code 0
+EXIT_CODE: 0
+
+============================================================
+ffmpeg -encoders (nvenc/qsv/amf/x264)
+============================================================
+COMMAND: C:\Users\frige\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe -hide_banner -encoders
+Encoders:
+ V..... = Video
+ A..... = Audio
+ S..... = Subtitle
+ .F.... = Frame-level multithreading
+ ..S... = Slice-level multithreading
+ ...X.. = Codec is experimental
+ ....B. = Supports draw_horiz_band
+ .....D = Supports direct rendering method 1
+ ------
+ V....D a64multi             Multicolor charset for Commodore 64 (codec a64_multi)
+ V....D a64multi5            Multicolor charset for Commodore 64, extended with 5th color (colram) (codec a64_multi5)
+ V....D alias_pix            Alias/Wavefront PIX image
+ V....D amv                  AMV Video
+ V....D apng                 APNG (Animated Portable Network Graphics) image
+ V....D liboapv              liboapv APV (codec apv)
+ V....D asv1                 ASUS V1
+ V....D asv2                 ASUS V2
+ V....D libaom-av1           libaom AV1 (codec av1)
+ V....D librav1e             librav1e AV1 (codec av1)
+ V..... libsvtav1            SVT-AV1(Scalable Video Technology for AV1) encoder (codec av1)
+ V....D av1_d3d12va          D3D12VA av1 encoder (codec av1)
+ V....D av1_nvenc            NVIDIA NVENC av1 encoder (codec av1)
+ V..... av1_qsv              AV1 (Intel Quick Sync Video acceleration) (codec av1)
+ V....D av1_amf              AMD AMF AV1 encoder (codec av1)
+ V....D av1_mf               AV1 via MediaFoundation (codec av1)
+ V....D av1_vaapi            AV1 (VAAPI) (codec av1)
+ V....D av1_vulkan           AV1 (Vulkan) (codec av1)
+ V....D avrp                 Avid 1:1 10-bit RGB Packer
+ V....D libxavs2             libxavs2 AVS2-P2/IEEE1857.4 (codec avs2)
+ V..X.D avui                 Avid Meridien Uncompressed
+ VF...D bitpacked            Bitpacked
+ V....D bmp                  BMP (Windows and OS/2 bitmap)
+ VF...D cfhd                 GoPro CineForm HD
+ V....D cinepak              Cinepak
+ V....D cljr                 Cirrus Logic AccuPak
+ V.S..D vc2                  SMPTE VC-2 (codec dirac)
+ VFS..D dnxhd                VC3/DNxHD
+ V....D dpx                  DPX (Digital Picture Exchange) image
+ VFS..D dvvideo              DV (Digital Video)
+ VFS..D dxv                  Resolume DXV
+ V....D libxeve              libxeve MPEG-5 EVC (codec evc)
+ VF...D exr                  OpenEXR image
+ V.S..D ffv1                 FFmpeg video codec #1
+ V....D ffv1_vulkan          FFmpeg video codec #1 (Vulkan) (codec ffv1)
+ VF...D ffvhuff              Huffyuv FFmpeg variant
+ V....D fits                 Flexible Image Transport System
+ V....D flashsv              Flash Screen Video
+ V....D flashsv2             Flash Screen Video Version 2
+ V....D flv                  FLV / Sorenson Spark / Sorenson H.263 (Flash Video) (codec flv1)
+ V....D gif                  GIF (Graphics Interchange Format)
+ V....D h261                 H.261
+ V....D h263                 H.263 / H.263-1996
+ V.S..D h263p                H.263+ / H.263-1998 / H.263 version 2
+ V....D libx264              libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (codec h264)
+ V....D libx264rgb           libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 RGB (codec h264)
+ V....D h264_amf             AMD AMF H.264 Encoder (codec h264)
+ V....D h264_d3d12va         D3D12VA h264 encoder (codec h264)
+ V....D h264_mf              H264 via MediaFoundation (codec h264)
+ V....D h264_nvenc           NVIDIA NVENC H.264 encoder (codec h264)
+ V..... h264_qsv             H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (Intel Quick Sync Video acceleration) (codec h264)
+ V....D h264_vaapi           H.264/AVC (VAAPI) (codec h264)
+ V....D h264_vulkan          H.264/AVC (Vulkan) (codec h264)
+ V.S..D hap                  Vidvox Hap
+ VF...D hdr                  HDR (Radiance RGBE format) image
+ V....D libx265              libx265 H.265 / HEVC (codec hevc)
+ V....D hevc_amf             AMD AMF HEVC encoder (codec hevc)
+ V....D hevc_d3d12va         D3D12VA hevc encoder (codec hevc)
+ V....D hevc_mf              HEVC via MediaFoundation (codec hevc)
+ V....D hevc_nvenc           NVIDIA NVENC hevc encoder (codec hevc)
+ V..... hevc_qsv             HEVC (Intel Quick Sync Video acceleration) (codec hevc)
+ V....D hevc_vaapi           H.265/HEVC (VAAPI) (codec hevc)
+ V....D hevc_vulkan          H.265/HEVC (Vulkan) (codec hevc)
+ VF...D huffyuv              Huffyuv / HuffYUV
+ VF...D jpeg2000             JPEG 2000
+ VF.... libopenjpeg          OpenJPEG JPEG 2000 (codec jpeg2000)
+ VF...D jpegls               JPEG-LS
+ V....D libjxl               libjxl JPEG XL (codec jpegxl)
+ V....D libjxl_anim          libjxl JPEG XL animated (codec jpegxl_anim)
+ V....D libsvtjpegxs         SVT JPEG XS(Scalable Video Technology for JPEG XS) encoder (codec jpegxs)
+ VF...D ljpeg                Lossless JPEG
+ VFS..D magicyuv             MagicYUV video
+ VFS..D mjpeg                MJPEG (Motion JPEG)
+ V..... mjpeg_qsv            MJPEG (Intel Quick Sync Video acceleration) (codec mjpeg)
+ V....D mjpeg_vaapi          MJPEG (VAAPI) (codec mjpeg)
+ V.S..D mpeg1video           MPEG-1 video
+ V.S..D mpeg2video           MPEG-2 video
+ V..... mpeg2_qsv            MPEG-2 video (Intel Quick Sync Video acceleration) (codec mpeg2video)
+ V....D mpeg2_vaapi          MPEG-2 (VAAPI) (codec mpeg2video)
+ V.S..D mpeg4                MPEG-4 part 2
+ V....D libxvid              libxvidcore MPEG-4 part 2 (codec mpeg4)
+ V....D msmpeg4v2            MPEG-4 part 2 Microsoft variant version 2
+ V....D msmpeg4              MPEG-4 part 2 Microsoft variant version 3 (codec msmpeg4v3)
+ V....D msrle                Microsoft RLE
+ V..... msvideo1             Microsoft Video-1
+ V....D pam                  PAM (Portable AnyMap) image
+ V....D pbm                  PBM (Portable BitMap) image
+ V....D pcx                  PC Paintbrush PCX image
+ V....D pfm                  PFM (Portable FloatMap) image
+ V....D pgm                  PGM (Portable GrayMap) image
+ V....D pgmyuv               PGMYUV (Portable GrayMap YUV) image
+ V....D phm                  PHM (Portable HalfFloatMap) image
+ VF...D png                  PNG (Portable Network Graphics) image
+ V....D ppm                  PPM (Portable PixelMap) image
+ VF...D prores               Apple ProRes
+ VF...D prores_aw            Apple ProRes (codec prores)
+ VFS... prores_ks            Apple ProRes (iCodec Pro) (codec prores)
+ V..... prores_ks_vulkan     Apple ProRes (iCodec Pro) (codec prores)
+ VF...D qoi                  QOI (Quite OK Image format) image
+ V....D qtrle                QuickTime Animation (RLE) video
+ V....D r10k                 AJA Kona 10-bit RGB Codec
+ V....D r210                 Uncompressed RGB 10-bit
+ VF...D rawvideo             raw video
+ V....D roqvideo             id RoQ video (codec roq)
+ V....D rpza                 QuickTime video (RPZA)
+ V....D rv10                 RealVideo 1.0
+ V....D rv20                 RealVideo 2.0
+ V....D sgi                  SGI image
+ V....D smc                  QuickTime Graphics (SMC)
+ V....D snow                 Snow
+ V....D speedhq              NewTek SpeedHQ
+ V....D sunrast              Sun Rasterfile image
+ V....D svq1                 Sorenson Vector Quantizer 1 / Sorenson Video 1 / SVQ1
+ V....D targa                Truevision Targa image
+ V....D libtheora            libtheora Theora (codec theora)
+ VF...D tiff                 TIFF image
+ VF...D utvideo              Ut Video
+ VF...D v210                 Uncompressed 4:2:2 10-bit
+ V....D v308                 Uncompressed packed 4:4:4
+ V....D v408                 Uncompressed packed QT 4:4:4:4
+ V....D v410                 Uncompressed 4:4:4 10-bit
+ V.S..D vbn                  Vizrt Binary Image
+ V..... vnull                null video
+ V....D libvpx               libvpx VP8 (codec vp8)
+ V....D vp8_vaapi            VP8 (VAAPI) (codec vp8)
+ V....D libvpx-vp9           libvpx VP9 (codec vp9)
+ V....D vp9_vaapi            VP9 (VAAPI) (codec vp9)
+ V..... vp9_qsv              VP9 video (Intel Quick Sync Video acceleration) (codec vp9)
+ V....D libvvenc             libvvenc H.266 / VVC (codec vvc)
+ VF...D wbmp                 WBMP (Wireless Application Protocol Bitmap) image
+ V....D libwebp_anim         libwebp WebP image (codec webp)
+ V....D libwebp              libwebp WebP image (codec webp)
+ V....D wmv1                 Windows Media Video 7
+ V....D wmv2                 Windows Media Video 8
+ V..... wrapped_avframe      AVFrame to AVPacket passthrough
+ V....D xbm                  XBM (X BitMap) image
+ V....D xface                X-face image
+ V....D xwd                  XWD (X Window Dump) image
+ V....D y41p                 Uncompressed YUV 4:1:1 12-bit
+ V....D yuv4                 Uncompressed packed 4:2:0
+ VF...D zlib                 LCL (LossLess Codec Library) ZLIB
+ V....D zmbv                 Zip Motion Blocks Video
+ A....D aac                  AAC (Advanced Audio Coding)
+ A....D aac_mf               AAC via MediaFoundation (codec aac)
+ A....D ac3                  ATSC A/52A (AC-3)
+ A....D ac3_fixed            ATSC A/52A (AC-3) (codec ac3)
+ A....D ac3_mf               AC3 via MediaFoundation (codec ac3)
+ A....D adpcm_adx            SEGA CRI ADX ADPCM
+ A....D adpcm_argo           ADPCM Argonaut Games
+ A....D g722                 G.722 ADPCM (codec adpcm_g722)
+ A....D g726                 G.726 ADPCM (codec adpcm_g726)
+ A....D g726le               G.726 little endian ADPCM ("right-justified") (codec adpcm_g726le)
+ A....D adpcm_ima_alp        ADPCM IMA High Voltage Software ALP
+ A....D adpcm_ima_amv        ADPCM IMA AMV
+ A....D adpcm_ima_apm        ADPCM IMA Ubisoft APM
+ A....D adpcm_ima_qt         ADPCM IMA QuickTime
+ A....D adpcm_ima_ssi        ADPCM IMA Simon & Schuster Interactive
+ A....D adpcm_ima_wav        ADPCM IMA WAV
+ A....D adpcm_ima_ws         ADPCM IMA Westwood
+ A....D adpcm_ms             ADPCM Microsoft
+ A....D adpcm_swf            ADPCM Shockwave Flash
+ A....D adpcm_yamaha         ADPCM Yamaha
+ A....D alac                 ALAC (Apple Lossless Audio Codec)
+ A....D libopencore_amrnb    OpenCORE AMR-NB (Adaptive Multi-Rate Narrow-Band) (codec amr_nb)
+ A....D libvo_amrwbenc       Android VisualOn AMR-WB (Adaptive Multi-Rate Wide-Band) (codec amr_wb)
+ A..... anull                null audio
+ A....D aptx                 aptX (Audio Processing Technology for Bluetooth)
+ A....D aptx_hd              aptX HD (Audio Processing Technology for Bluetooth)
+ A....D libcodec2            codec2 encoder using libcodec2 (codec codec2)
+ A....D comfortnoise         RFC 3389 comfort noise generator
+ A....D dfpwm                DFPWM1a audio
+ A..X.D dca                  DCA (DTS Coherent Acoustics) (codec dts)
+ A....D eac3                 ATSC A/52 E-AC-3
+ A....D flac                 FLAC (Free Lossless Audio Codec)
+ A....D g723_1               G.723.1
+ A....D libgsm               libgsm GSM (codec gsm)
+ A....D libgsm_ms            libgsm GSM Microsoft variant (codec gsm_ms)
+ A....D libilbc              iLBC (Internet Low Bitrate Codec) (codec ilbc)
+ A....D liblc3               LC3 (Low Complexity Communication Codec) (codec lc3)
+ A..X.D mlp                  MLP (Meridian Lossless Packing)
+ A....D mp2                  MP2 (MPEG audio layer 2)
+ A....D mp2fixed             MP2 fixed point (MPEG audio layer 2) (codec mp2)
+ A....D libtwolame           libtwolame MP2 (MPEG audio layer 2) (codec mp2)
+ A....D libmp3lame           libmp3lame MP3 (MPEG audio layer 3) (codec mp3)
+ A....D libshine             libshine MP3 (MPEG audio layer 3) (codec mp3)
+ A....D mp3_mf               MP3 via MediaFoundation (codec mp3)
+ A....D nellymoser           Nellymoser Asao
+ A..X.D opus                 Opus
+ A....D libopus              libopus Opus (codec opus)
+ A....D pcm_alaw             PCM A-law / G.711 A-law
+ A....D pcm_bluray           PCM signed 16|20|24-bit big-endian for Blu-ray media
+ A....D pcm_dvd              PCM signed 16|20|24-bit big-endian for DVD media
+ A....D pcm_f32be            PCM 32-bit floating point big-endian
+ A....D pcm_f32le            PCM 32-bit floating point little-endian
+ A....D pcm_f64be            PCM 64-bit floating point big-endian
+ A....D pcm_f64le            PCM 64-bit floating point little-endian
+ A....D pcm_mulaw            PCM mu-law / G.711 mu-law
+ A....D pcm_s16be            PCM signed 16-bit big-endian
+ A....D pcm_s16be_planar     PCM signed 16-bit big-endian planar
+ A....D pcm_s16le            PCM signed 16-bit little-endian
+ A....D pcm_s16le_planar     PCM signed 16-bit little-endian planar
+ A....D pcm_s24be            PCM signed 24-bit big-endian
+ A....D pcm_s24daud          PCM D-Cinema audio signed 24-bit
+ A....D pcm_s24le            PCM signed 24-bit little-endian
+ A....D pcm_s24le_planar     PCM signed 24-bit little-endian planar
+ A....D pcm_s32be            PCM signed 32-bit big-endian
+ A....D pcm_s32le            PCM signed 32-bit little-endian
+ A....D pcm_s32le_planar     PCM signed 32-bit little-endian planar
+ A....D pcm_s64be            PCM signed 64-bit big-endian
+ A....D pcm_s64le            PCM signed 64-bit little-endian
+ A....D pcm_s8               PCM signed 8-bit
+ A....D pcm_s8_planar        PCM signed 8-bit planar
+ A....D pcm_u16be            PCM unsigned 16-bit big-endian
+ A....D pcm_u16le            PCM unsigned 16-bit little-endian
+ A....D pcm_u24be            PCM unsigned 24-bit big-endian
+ A....D pcm_u24le            PCM unsigned 24-bit little-endian
+ A....D pcm_u32be            PCM unsigned 32-bit big-endian
+ A....D pcm_u32le            PCM unsigned 32-bit little-endian
+ A....D pcm_u8               PCM unsigned 8-bit
+ A....D pcm_vidc             PCM Archimedes VIDC
+ A....D real_144             RealAudio 1.0 (14.4K) (codec ra_144)
+ A....D roq_dpcm             id RoQ DPCM
+ A..X.D s302m                SMPTE 302M
+ A....D sbc                  SBC (low-complexity subband codec)
+ A....D libspeex             libspeex Speex (codec speex)
+ A..X.D truehd               TrueHD
+ A....D tta                  TTA (True Audio)
+ A..X.D vorbis               Vorbis
+ A....D libvorbis            libvorbis (codec vorbis)
+ A....D wavpack              WavPack
+ A....D wmav1                Windows Media Audio 1
+ A....D wmav2                Windows Media Audio 2
+ S..... ssa                  ASS (Advanced SubStation Alpha) subtitle (codec ass)
+ S..... ass                  ASS (Advanced SubStation Alpha) subtitle
+ S..... dvbsub               DVB subtitles (codec dvb_subtitle)
+ S..... dvdsub               DVD subtitles (codec dvd_subtitle)
+ S..... mov_text             3GPP Timed Text subtitle
+ S..... srt                  SubRip subtitle (codec subrip)
+ S..... subrip               SubRip subtitle
+ S..... text                 Raw text subtitle
+ S..... ttml                 TTML subtitle
+ S..... webvtt               WebVTT subtitle
+ S..... xsub                 DivX subtitles (XSUB)
+EXIT_CODE: 0
+
+============================================================
+ffmpeg -h encoder=h264_nvenc
+============================================================
+COMMAND: C:\Users\frige\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe -hide_banner -h encoder=h264_nvenc
+Encoder h264_nvenc [NVIDIA NVENC H.264 encoder]:
+    General capabilities: dr1 delay hardware 
+    Threading capabilities: none
+    Supported hardware devices: cuda cuda d3d11va d3d11va 
+    Supported pixel formats: yuv420p nv12 p010le yuv444p p016le nv16 p210le p216le yuv444p10msble yuv444p16le bgr0 bgra rgb0 rgba x2rgb10le x2bgr10le gbrp gbrp10msble gbrp16le cuda d3d11
+h264_nvenc AVOptions:
+  -preset            <int>        E..V....... Set the encoding preset (from 0 to 18) (default p4)
+     default         0            E..V....... 
+     slow            1            E..V....... hq 2 passes
+     medium          2            E..V....... hq 1 pass
+     fast            3            E..V....... hp 1 pass
+     hp              4            E..V....... 
+     hq              5            E..V....... 
+     bd              6            E..V....... 
+     ll              7            E..V....... low latency
+     llhq            8            E..V....... low latency hq
+     llhp            9            E..V....... low latency hp
+     lossless        10           E..V....... 
+     losslesshp      11           E..V....... 
+     p1              12           E..V....... fastest (lowest quality)
+     p2              13           E..V....... faster (lower quality)
+     p3              14           E..V....... fast (low quality)
+     p4              15           E..V....... medium (default)
+     p5              16           E..V....... slow (good quality)
+     p6              17           E..V....... slower (better quality)
+     p7              18           E..V....... slowest (best quality)
+  -tune              <int>        E..V....... Set the encoding tuning info (from 1 to 4) (default hq)
+     hq              1            E..V....... High quality
+     ll              2            E..V....... Low latency
+     ull             3            E..V....... Ultra low latency
+     lossless        4            E..V....... Lossless
+  -profile           <int>        E..V....... Set the encoding profile (from 0 to 5) (default main)
+     baseline        0            E..V....... 
+     main            1            E..V....... 
+     high            2            E..V....... 
+     high10          3            E..V....... 
+     high422         4            E..V....... 
+     high444p        5            E..V....... 
+  -level             <int>        E..V....... Set the encoding level restriction (from 0 to 62) (default auto)
+     auto            0            E..V....... 
+     1               10           E..V....... 
+     1.0             10           E..V....... 
+     1b              9            E..V....... 
+     1.0b            9            E..V....... 
+     1.1             11           E..V....... 
+     1.2             12           E..V....... 
+     1.3             13           E..V....... 
+     2               20           E..V....... 
+     2.0             20           E..V....... 
+     2.1             21           E..V....... 
+     2.2             22           E..V....... 
+     3               30           E..V....... 
+     3.0             30           E..V....... 
+     3.1             31           E..V....... 
+     3.2             32           E..V....... 
+     4               40           E..V....... 
+     4.0             40           E..V....... 
+     4.1             41           E..V....... 
+     4.2             42           E..V....... 
+     5               50           E..V....... 
+     5.0             50           E..V....... 
+     5.1             51           E..V....... 
+     5.2             52           E..V....... 
+     6.0             60           E..V....... 
+     6.1             61           E..V....... 
+     6.2             62           E..V....... 
+  -rc                <int>        E..V....... Override the preset rate-control (from -1 to INT_MAX) (default -1)
+     constqp         0            E..V....... Constant QP mode
+     vbr             1            E..V....... Variable bitrate mode
+     cbr             2            E..V....... Constant bitrate mode
+     vbr_minqp       8388609      E..V....... Variable bitrate mode with MinQP (deprecated)
+     ll_2pass_quality 8388609      E..V....... Multi-pass optimized for image quality (deprecated)
+     ll_2pass_size   8388610      E..V....... Multi-pass optimized for constant frame size (deprecated)
+     vbr_2pass       8388609      E..V....... Multi-pass variable bitrate mode (deprecated)
+     cbr_ld_hq       8388610      E..V....... Constant bitrate low delay high quality mode
+     cbr_hq          8388610      E..V....... Constant bitrate high quality mode
+     vbr_hq          8388609      E..V....... Variable bitrate high quality mode
+  -rc-lookahead      <int>        E..V....... Number of frames to look ahead for rate-control (from 0 to INT_MAX) (default 0)
+  -surfaces          <int>        E..V....... Number of concurrent surfaces (from 0 to 64) (default 0)
+  -cbr               <boolean>    E..V....... Use cbr encoding mode (default false)
+  -2pass             <boolean>    E..V....... Use 2pass encoding mode (default auto)
+  -gpu               <int>        E..V....... Selects which NVENC capable GPU to use. First GPU is 0, second is 1, and so on. (from -2 to INT_MAX) (default any)
+     any             -1           E..V....... Pick the first device available
+     list            -2           E..V....... List the available devices
+  -rgb_mode          <int>        E..V....... Configure how nvenc handles packed RGB input. (from 0 to INT_MAX) (default yuv420)
+     yuv420          1            E..V....... Convert to yuv420
+     yuv444          2            E..V....... Convert to yuv444
+     disabled        0            E..V....... Disables support, throws an error.
+  -delay             <int>        E..V....... Delay frame output by the given amount of frames (from 0 to INT_MAX) (default INT_MAX)
+  -no-scenecut       <boolean>    E..V....... When lookahead is enabled, set this to 1 to disable adaptive I-frame insertion at scene cuts (default false)
+  -forced-idr        <boolean>    E..V....... If forcing keyframes, force them as IDR frames. (default false)
+  -b_adapt           <boolean>    E..V....... When lookahead is enabled, set this to 0 to disable adaptive B-frame decision (default true)
+  -spatial-aq        <boolean>    E..V....... set to 1 to enable Spatial AQ (default false)
+  -spatial_aq        <boolean>    E..V....... set to 1 to enable Spatial AQ (default false)
+  -temporal-aq       <boolean>    E..V....... set to 1 to enable Temporal AQ (default false)
+  -temporal_aq       <boolean>    E..V....... set to 1 to enable Temporal AQ (default false)
+  -zerolatency       <boolean>    E..V....... Set 1 to indicate zero latency operation (no reordering delay) (default false)
+  -nonref_p          <boolean>    E..V....... Set this to 1 to enable automatic insertion of non-reference P-frames (default false)
+  -strict_gop        <boolean>    E..V....... Set 1 to minimize GOP-to-GOP rate fluctuations (default false)
+  -aq-strength       <int>        E..V....... When Spatial AQ is enabled, this field is used to specify AQ strength. AQ strength scale is from 1 (low) - 15 (aggressive) (from 1 to 15) (default 8)
+  -cq                <float>      E..V....... Set target quality level (0 to 51, 0 means automatic) for constant quality mode in VBR rate control (from 0 to 51) (default 0)
+  -aud               <boolean>    E..V....... Use access unit delimiters (default false)
+  -bluray-compat     <boolean>    E..V....... Bluray compatibility workarounds (default false)
+  -init_qpP          <int>        E..V....... Initial QP value for P frame (from -1 to 51) (default -1)
+  -init_qpB          <int>        E..V....... Initial QP value for B frame (from -1 to 51) (default -1)
+  -init_qpI          <int>        E..V....... Initial QP value for I frame (from -1 to 51) (default -1)
+  -qp                <int>        E..V....... Constant quantization parameter rate control method (from -1 to 51) (default -1)
+  -qp_cb_offset      <int>        E..V....... Quantization parameter offset for cb channel (from -12 to 12) (default 0)
+  -qp_cr_offset      <int>        E..V....... Quantization parameter offset for cr channel (from -12 to 12) (default 0)
+  -qmin              <int>        E..V....... Specifies the minimum QP used for rate control (from -1 to 51) (default -1)
+  -qmax              <int>        E..V....... Specifies the maximum QP used for rate control (from -1 to 51) (default -1)
+  -weighted_pred     <int>        E..V....... Set 1 to enable weighted prediction (from 0 to 1) (default 0)
+  -coder             <int>        E..V....... Coder type (from -1 to 2) (default default)
+     default         -1           E..V....... 
+     auto            0            E..V....... 
+     cabac           1            E..V....... 
+     cavlc           2            E..V....... 
+     ac              1            E..V....... 
+     vlc             2            E..V....... 
+  -b_ref_mode        <int>        E..V....... Use B frames as references (from -1 to 2) (default -1)
+     disabled        0            E..V....... B frames will not be used for reference
+     each            1            E..V....... Each B frame will be used for reference
+     middle          2            E..V....... Only (number of B frames)/2 will be used for reference
+  -a53cc             <boolean>    E..V....... Use A53 Closed Captions (if available) (default true)
+  -s12m_tc           <boolean>    E..V....... Use timecode (if available) (default true)
+  -dpb_size          <int>        E..V....... Specifies the DPB size used for encoding (0 means automatic) (from 0 to INT_MAX) (default 0)
+  -multipass         <int>        E..V....... Set the multipass encoding (from 0 to 2) (default disabled)
+     disabled        0            E..V....... Single Pass
+     qres            1            E..V....... Two Pass encoding is enabled where first Pass is quarter resolution
+     fullres         2            E..V....... Two Pass encoding is enabled where first Pass is full resolution
+  -highbitdepth      <boolean>    E..V....... Enable 10 bit encode for 8 bit input (default false)
+  -ldkfs             <int>        E..V....... Low delay key frame scale; Specifies the Scene Change frame size increase allowed in case of single frame VBV and CBR (from 0 to 255) (default 0)
+  -extra_sei         <boolean>    E..V....... Pass on extra SEI data (e.g. a53 cc) to be included in the bitstream (default true)
+  -udu_sei           <boolean>    E..V....... Pass on user data unregistered SEI if available (default false)
+  -intra-refresh     <boolean>    E..V....... Use Periodic Intra Refresh instead of IDR frames (default false)
+  -single-slice-intra-refresh <boolean>    E..V....... Use single slice intra refresh (default false)
+  -max_slice_size    <int>        E..V....... Maximum encoded slice size in bytes (from 0 to INT_MAX) (default 0)
+  -constrained-encoding <boolean>    E..V....... Enable constrainedFrame encoding where each slice in the constrained picture is independent of other slices (default false)
+  -cbr_padding       <boolean>    E..V....... Pad the bitstream to ensure bitrate does not drop below the target in CBR mode (default false)
+  -tf_level          <int>        E..V....... Specifies the strength of the temporal filtering (from -1 to INT_MAX) (default -1)
+     0               0            E..V....... 
+     4               4            E..V....... 
+  -lookahead_level   <int>        E..V....... Specifies the lookahead level. Higher level may improve quality at the expense of performance. (from -1 to 15) (default -1)
+     auto            15           E..V....... 
+     0               0            E..V....... 
+     1               1            E..V....... 
+     2               2            E..V....... 
+     3               3            E..V....... 
+
+
+Exiting with exit code 0
+EXIT_CODE: 0
+
+============================================================
+NVENC smoke test (minimal)
+============================================================
+COMMAND: C:\Users\frige\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe -hide_banner -loglevel verbose -f lavfi -i color=size=1280x720:rate=60:color=black -frames:v 120 -an -c:v h264_nvenc -preset p4 -f null NUL
+[Parsed_color_0 @ 0000026a584df040] size:1280x720 rate:60/1 duration:-1.000000 sar:1/1
+Input #0, lavfi, from 'color=size=1280x720:rate=60:color=black':
+  Duration: N/A, start: 0.000000, bitrate: N/A
+  Stream #0:0: Video: wrapped_avframe, 1 reference frame, yuv420p, 1280x720 [SAR 1:1 DAR 16:9], 60 fps, 60 tbr, 60 tbn
+[out#0/null @ 0000026a584d7fc0] No explicit maps, mapping streams automatically...
+[vost#0:0/h264_nvenc @ 0000026a589f7b00] Created video stream from input stream 0:0
+Stream mapping:
+  Stream #0:0 -> #0:0 (wrapped_avframe (native) -> h264 (h264_nvenc))
+[vost#0:0/h264_nvenc @ 0000026a589f7b00] Starting thread...
+[vf#0:0 @ 0000026a58a12ac0] Starting thread...
+[vist#0:0/wrapped_avframe @ 0000026a584e2400] [dec:wrapped_avframe @ 0000026a589f6700] Starting thread...
+[in#0/lavfi @ 0000026a584d7a00] Starting thread...
+Press [q] to stop, [?] for help
+[graph -1 input from stream 0:0 @ 0000026a584d7880] w:1280 h:720 pixfmt:yuv420p tb:1/60 fr:60/1 sar:1/1 csp:unknown range:unknown alpha:unspecified
+[graph -1 input from stream 0:0 @ 0000026a584d7880] video frame properties congruent with link at pts_time: 0
+[h264_nvenc @ 0000026a58558480] Cannot load nvcuda.dll
+[h264_nvenc @ 0000026a58558480] Nvenc unloaded
+[vost#0:0/h264_nvenc @ 0000026a589f7b00] [enc:h264_nvenc @ 0000026a58497f80] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 0000026a58a12ac0] Error sending frames to consumers: Operation not permitted
+[vf#0:0 @ 0000026a58a12ac0] Task finished with error code: -1 (Operation not permitted)
+[vf#0:0 @ 0000026a58a12ac0] Terminating thread with return code -1 (Operation not permitted)
+[vist#0:0/wrapped_avframe @ 0000026a584e2400] [dec:wrapped_avframe @ 0000026a589f6700] Decoder returned EOF, finishing
+[vost#0:0/h264_nvenc @ 0000026a589f7b00] [enc:h264_nvenc @ 0000026a58497f80] Encoder thread received EOF
+[vost#0:0/h264_nvenc @ 0000026a589f7b00] [enc:h264_nvenc @ 0000026a58497f80] Could not open encoder before EOF
+[in#0/lavfi @ 0000026a584d7a00] Terminating thread with return code 0 (success)
+[vist#0:0/wrapped_avframe @ 0000026a584e2400] [dec:wrapped_avframe @ 0000026a589f6700] Terminating thread with return code 0 (success)
+[vost#0:0/h264_nvenc @ 0000026a589f7b00] Task finished with error code: -22 (Invalid argument)
+[vost#0:0/h264_nvenc @ 0000026a589f7b00] Terminating thread with return code -22 (Invalid argument)
+[out#0/null @ 0000026a584d7fc0] Nothing was written into output file, because at least one of its streams received no packets.
+frame=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.00    
+[in#0/lavfi @ 0000026a584d7a00] Input file #0 (color=size=1280x720:rate=60:color=black):
+[in#0/lavfi @ 0000026a584d7a00]   Input stream #0:0 (video): 13 packets read (5512 bytes); 4 frames decoded; 0 decode errors; 
+[in#0/lavfi @ 0000026a584d7a00]   Total: 13 packets (5512 bytes) demuxed
+Conversion failed!
+System.Management.Automation.RemoteException
+Exiting with exit code -1
+EXIT_CODE: -1
+
+============================================================
+NVENC smoke test (app-like flags)
+============================================================
+COMMAND: C:\Users\frige\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\ffmpeg.exe -hide_banner -loglevel verbose -f lavfi -i color=size=1280x720:rate=60:color=black -an -r 60 -c:v h264_nvenc -preset p1 -tune ll -rc cbr -bf 0 -zerolatency 1 -level 5.1 -g 30 -b:v 10000k -maxrate 10000k -bufsize 2500k -frames:v 120 -f null NUL
+[Parsed_color_0 @ 000001daa1620600] size:1280x720 rate:60/1 duration:-1.000000 sar:1/1
+Input #0, lavfi, from 'color=size=1280x720:rate=60:color=black':
+  Duration: N/A, start: 0.000000, bitrate: N/A
+  Stream #0:0: Video: wrapped_avframe, 1 reference frame, yuv420p, 1280x720 [SAR 1:1 DAR 16:9], 60 fps, 60 tbr, 60 tbn
+[out#0/null @ 000001daa1b37dc0] No explicit maps, mapping streams automatically...
+[vost#0:0/h264_nvenc @ 000001daa16996c0] Created video stream from input stream 0:0
+Stream mapping:
+  Stream #0:0 -> #0:0 (wrapped_avframe (native) -> h264 (h264_nvenc))
+[vost#0:0/h264_nvenc @ 000001daa16996c0] Starting thread...
+[vf#0:0 @ 000001daa169bd00] Starting thread...
+[vist#0:0/wrapped_avframe @ 000001daa1b37700] [dec:wrapped_avframe @ 000001daa1b36a40] Starting thread...
+[in#0/lavfi @ 000001daa1618a80] Starting thread...
+Press [q] to stop, [?] for help
+[graph -1 input from stream 0:0 @ 000001daa1609580] w:1280 h:720 pixfmt:yuv420p tb:1/60 fr:60/1 sar:1/1 csp:unknown range:unknown alpha:unspecified
+[graph -1 input from stream 0:0 @ 000001daa1609580] video frame properties congruent with link at pts_time: 0
+[h264_nvenc @ 000001daa1699940] Cannot load nvcuda.dll
+[h264_nvenc @ 000001daa1699940] Nvenc unloaded
+[vost#0:0/h264_nvenc @ 000001daa16996c0] [enc:h264_nvenc @ 000001daa15d7b00] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[vf#0:0 @ 000001daa169bd00] Error sending frames to consumers: Operation not permitted
+[vf#0:0 @ 000001daa169bd00] Task finished with error code: -1 (Operation not permitted)
+[vf#0:0 @ 000001daa169bd00] Terminating thread with return code -1 (Operation not permitted)
+[vost#0:0/h264_nvenc @ 000001daa16996c0] [enc:h264_nvenc @ 000001daa15d7b00] Encoder thread received EOF
+[vost#0:0/h264_nvenc @ 000001daa16996c0] [enc:h264_nvenc @ 000001daa15d7b00] Could not open encoder before EOF
+[vist#0:0/wrapped_avframe @ 000001daa1b37700] [dec:wrapped_avframe @ 000001daa1b36a40] Decoder returned EOF, finishing
+[vist#0:0/wrapped_avframe @ 000001daa1b37700] [dec:wrapped_avframe @ 000001daa1b36a40] Terminating thread with return code 0 (success)
+[vist#0:0/wrapped_avframe @ 000001daa1b37700] All consumers of this stream are done
+[in#0/lavfi @ 000001daa1618a80] All consumers are done
+[in#0/lavfi @ 000001daa1618a80] Terminating thread with return code 0 (success)
+[vost#0:0/h264_nvenc @ 000001daa16996c0] Task finished with error code: -22 (Invalid argument)
+[vost#0:0/h264_nvenc @ 000001daa16996c0] Terminating thread with return code -22 (Invalid argument)
+[out#0/null @ 000001daa1b37dc0] Nothing was written into output file, because at least one of its streams received no packets.
+frame=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.00    
+[in#0/lavfi @ 000001daa1618a80] Input file #0 (color=size=1280x720:rate=60:color=black):
+[in#0/lavfi @ 000001daa1618a80]   Input stream #0:0 (video): 13 packets read (5512 bytes); 4 frames decoded; 0 decode errors; 
+[in#0/lavfi @ 000001daa1618a80]   Total: 13 packets (5512 bytes) demuxed
+Conversion failed!
+System.Management.Automation.RemoteException
+Exiting with exit code -1
+EXIT_CODE: -1
+
+============================================================
+Done
+============================================================
+Diagnostic log written to: C:\Users\frige\Documents\tablet-second-monitor\logs\nvenc-diagnostic-20260417-184051.txt
