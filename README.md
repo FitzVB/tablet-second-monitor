@@ -2,7 +2,8 @@
 
 Turn an Android device into a touch-enabled second monitor for Windows over USB (recommended) or Wi-Fi.
 
-> **Primera vez usando FlexDisplay?** Lee la [Guía de inicio rápido para usuarios](GUIA-INICIO-RAPIDO.md) — instrucciones paso a paso sin tecnicismos.
+> **New to FlexDisplay?** Read the step-by-step guide for non-technical users:
+> [English — Quick Start Guide](QUICK-START.md) · [Español — Guía de inicio rápido](QUICK-START.es.md)
 
 ## Minimum Requirements
 
