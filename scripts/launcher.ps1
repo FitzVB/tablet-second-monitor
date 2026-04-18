@@ -12,79 +12,6 @@ $wifiScript = Join-Path $PSScriptRoot "start-wifi.ps1"
 $installVddScript = Join-Path $PSScriptRoot "install-virtual-display.ps1"
 $ensureRuntimeScript = Join-Path $PSScriptRoot "ensure-runtime.ps1"
 
-function Test-IsAdmin {
-    try {
-        $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    }
-    catch {
-        return $false
-    }
-}
-
-function Add-DefenderExclusion {
-    param([string]$FolderPath)
-    # Check if already excluded
-    try {
-        $prefs = Get-MpPreference -ErrorAction Stop
-        $existing = $prefs.ExclusionPath
-        if ($existing -contains $FolderPath) {
-            Write-Host '[OK] Antivirus exclusion already configured' -ForegroundColor Green
-            return
-        }
-    }
-    catch {
-        # Windows Defender not available / managed by policy — skip silently
-        return
-    }
-
-    Write-Host ''
-    Write-Host '[!] Windows Defender may flag host-windows.exe as suspicious.' -ForegroundColor Yellow
-    Write-Host '    This is a false positive. The binary is open-source:' -ForegroundColor Yellow
-    Write-Host "    https://github.com/FitzVB/tablet-second-monitor" -ForegroundColor DarkYellow
-    Write-Host ''
-    Write-Host '    To fix this, FlexDisplay needs to add its folder to the' -ForegroundColor Yellow
-    Write-Host '    Defender exclusion list (requires administrator privileges).' -ForegroundColor Yellow
-    Write-Host ''
-
-    if (Test-IsAdmin) {
-        try {
-            Add-MpPreference -ExclusionPath $FolderPath -ErrorAction Stop
-            Write-Host '[OK] Antivirus exclusion added successfully' -ForegroundColor Green
-        }
-        catch {
-            Write-Host "[WARN] Could not add exclusion: $($_.Exception.Message)" -ForegroundColor Yellow
-        }
-    }
-    else {
-        Write-Host '    Running elevated process to add exclusion...' -ForegroundColor Cyan
-        try {
-            $escaped = $FolderPath -replace "'", "''"
-            $elevatedCmd = "Add-MpPreference -ExclusionPath '$escaped'"
-            $result = Start-Process powershell.exe `
-                -ArgumentList "-NoProfile -NonInteractive -Command `"$elevatedCmd`"" `
-                -Verb RunAs `
-                -Wait `
-                -PassThru `
-                -ErrorAction Stop
-            if ($result.ExitCode -eq 0) {
-                Write-Host '[OK] Antivirus exclusion added successfully' -ForegroundColor Green
-            }
-            else {
-                Write-Host '[WARN] Exclusion was not added (admin prompt rejected or failed).' -ForegroundColor Yellow
-                Write-Host '       You can add it manually: Windows Security -> Virus & threat protection' -ForegroundColor DarkYellow
-                Write-Host "       -> Manage settings -> Exclusions -> Add -> Folder -> $FolderPath" -ForegroundColor DarkYellow
-            }
-        }
-        catch {
-            Write-Host '[WARN] Could not request elevation. Add the exclusion manually:' -ForegroundColor Yellow
-            Write-Host '       Windows Security -> Virus & threat protection -> Manage settings' -ForegroundColor DarkYellow
-            Write-Host "       -> Exclusions -> Add an exclusion -> Folder -> $FolderPath" -ForegroundColor DarkYellow
-        }
-    }
-    Write-Host ''
-}
-
 function Test-VirtualDisplayDriverInstalled {
     # Match any indirect display adapter installed as ROOT\DISPLAY (all VDD variants)
     # or by known friendly name patterns used across different VDD package versions.
@@ -101,9 +28,6 @@ function Test-VirtualDisplayDriverInstalled {
     Where-Object { $_.FriendlyName -like '*VDD*' -or $_.FriendlyName -like '*Virtual*' }
     return ($null -ne $monitorPresent)
 }
-
-# Defender exclusion — prevent false positive quarantine
-Add-DefenderExclusion -FolderPath $root
 
 # VDD check — informational only, no auto-install
 Write-Host '[*] Checking virtual display driver...' -ForegroundColor Cyan
