@@ -1,5 +1,11 @@
 # FlexDisplay (Windows + Android)
 
+<p align="center">
+  <a href="https://ko-fi.com/obsidian_motion" target="_blank">
+    <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" />
+  </a>
+</p>
+
 Turn an Android device into a touch-enabled second monitor for Windows over USB (recommended) or Wi-Fi.
 
 > **New to FlexDisplay?** Read the step-by-step guide for non-technical users:
