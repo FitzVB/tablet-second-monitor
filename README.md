@@ -2,6 +2,8 @@
 
 Turn an Android device into a touch-enabled second monitor for Windows over USB (recommended) or Wi-Fi.
 
+> **Primera vez usando FlexDisplay?** Lee la [Guía de inicio rápido para usuarios](GUIA-INICIO-RAPIDO.md) — instrucciones paso a paso sin tecnicismos.
+
 ## Minimum Requirements
 
 ### Windows PC (host)
@@ -201,13 +203,19 @@ Use this when you want 2, 3, or 4 Android devices as different monitors.
 
 ### Step 1. Install virtual display support (one-time)
 
-From the project root, run:
+> **Virtual Display Driver (VDD)** is a free, open-source signed driver maintained by the community.
+> Official page: **[github.com/VirtualDrivers/Virtual-Display-Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver)**
+> Direct download (installer): **[Releases page](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases)**
+
+You can install it in two ways:
+
+**Option A — Script (recommended):** from the project root, run:
 
 ```powershell
 .\scripts\install-virtual-display.ps1
 ```
 
-This installs a signed virtual display driver using winget.
+**Option B — Manual installer:** download `Virtual-Driver-Control-Installer.exe` from the [VDD Releases page](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases), run it, and click **Install**.
 
 ### If you need more virtual displays
 
