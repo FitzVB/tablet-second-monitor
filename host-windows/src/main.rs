@@ -549,15 +549,13 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::get())
         .map(|| warp::reply::html(host_gui_html()));
 
-    let logo_route = warp::path!("brand" / "logo.png")
-        .and(warp::get())
-        .map(|| {
-            warp::http::Response::builder()
-                .header("content-type", "image/png")
-                .header("cache-control", "public, max-age=3600")
-                .body(logo_png_bytes().to_vec())
-                .expect("build png response")
-        });
+    let logo_route = warp::path!("brand" / "logo.png").and(warp::get()).map(|| {
+        warp::http::Response::builder()
+            .header("content-type", "image/png")
+            .header("cache-control", "public, max-age=3600")
+            .body(logo_png_bytes().to_vec())
+            .expect("build png response")
+    });
 
     let capabilities_route = warp::path!("api" / "capabilities")
         .and(warp::get())
@@ -997,7 +995,7 @@ async fn handle_h264_stream(
         };
 
         if let Some(pref) = preferred.as_deref() {
-            if hw.contains(&
+            if hw.contains(&pref) {
                 if pref == "h264_amf" {
                     for cap in capture_order {
                         for pre in &amf_pre_args_candidates {
@@ -1094,7 +1092,11 @@ async fn handle_h264_stream(
                     encoder: encoder.to_string(),
                     capture: *capture,
                     pre_input_args: pre_args.clone(),
-                    nvenc_gpu: if encoder == "h264_nvenc" { *nvenc_gpu } else { None },
+                    nvenc_gpu: if encoder == "h264_nvenc" {
+                        *nvenc_gpu
+                    } else {
+                        None
+                    },
                 },
                 if encoder == "h264_amf" {
                     Some(settings.clone())
@@ -1116,7 +1118,11 @@ async fn handle_h264_stream(
                                 let current_saved = settings.read().await.preferred_encoder.clone();
                                 if current_saved.as_deref() != Some(encoder.as_str()) {
                                     let learned = encoder.to_string();
-                                    let learned_gpu = if encoder == "h264_nvenc" { *nvenc_gpu } else { None };
+                                    let learned_gpu = if encoder == "h264_nvenc" {
+                                        *nvenc_gpu
+                                    } else {
+                                        None
+                                    };
                                     let settings_for_learn = settings.clone();
                                     tokio::spawn(async move {
                                         let maybe_updated = {
@@ -1138,7 +1144,8 @@ async fn handle_h264_stream(
                                         if let Some(to_save) = maybe_updated {
                                             let _ = tokio::task::spawn_blocking(move || {
                                                 save_host_settings_to_disk(&to_save);
-                                            }).await;
+                                            })
+                                            .await;
                                             info!(encoder = %learned, nvenc_gpu = ?learned_gpu, "auto-learned encoder persisted for this machine");
                                         }
                                     });
@@ -1677,21 +1684,33 @@ fn ffmpeg_log_path(encoder: &str) -> std::path::PathBuf {
     let (mut year, mut month, mut day_of_month) = (1970u64, 1u64, 1u64);
     let mut d = days;
     loop {
-        let leap = if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) { 366 } else { 365 };
-        if d < leap { break; }
+        let leap = if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) {
+            366
+        } else {
+            365
+        };
+        if d < leap {
+            break;
+        }
         d -= leap;
         year += 1;
     }
-    let leap = if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) { 1 } else { 0 };
+    let leap = if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) {
+        1
+    } else {
+        0
+    };
     let months = [31u64, 28 + leap, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     for &m in &months {
-        if d < m { break; }
+        if d < m {
+            break;
+        }
         d -= m;
         month += 1;
     }
     day_of_month += d;
     let ts = format!("{year:04}{month:02}{day_of_month:02}-{hh:02}{mm:02}{ss:02}");
-    let safe_enc = encoder.replace([':', '/']
+    let safe_enc = encoder.replace([':', '/'], "_");
     let filename = format!("ffmpeg-{safe_enc}-{ts}.txt");
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
