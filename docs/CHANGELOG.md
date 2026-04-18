@@ -95,7 +95,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - [ ] Audio streaming (AAC codec)
 - [ ] WiFi direct support (fallback)
 - [ ] Cursor tracking overlay
-- [ ] Mouse/keyboard input from tablet
+- [ ] Mouse/keyboard input from device
 - [ ] Settings persistence on Android
 - [ ] Recording mode (save stream to file)
 
@@ -112,7 +112,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - [ ] HEVC (H.265) codec support
 - [ ] RTMP/RTSP streaming output
-- [ ] Web client (browser-based tablet)
+- [ ] Web client (browser-based device)
 - [ ] Cloud streaming (low latency WebRTC)
 - [ ] Network resilience (auto-reconnect)
 - [ ] 4K streaming support

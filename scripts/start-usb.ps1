@@ -1,44 +1,229 @@
-# Tablet Monitor - USB Mode Server with Auto-Forward
+# FlexDisplay - USB One-Click Start
+# This flow is intended for non-technical usage:
+# - Detect/select device
+# - Install APK only when missing (or force reinstall)
+# - Configure adb reverse
+# - Launch Android app
+# - Start host server
+
+param(
+    [switch]$ForceInstallApk = $false
+)
 
 Write-Host ""
-Write-Host "Tablet Monitor - USB Mode Startup" -ForegroundColor Cyan
+Write-Host "FlexDisplay - USB Mode Startup" -ForegroundColor Cyan
 Write-Host "===================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Ensure adb is available (auto-add Android SDK platform-tools)
-$platformTools = Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools"
-# Reset PATH to machine+user defaults so cargo/rustup are available.
-$env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
-if (Test-Path $platformTools) {
-    $env:Path = $env:Path + ";" + $platformTools
+$runtimeEnv = Join-Path $PSScriptRoot "runtime-env.ps1"
+if (Test-Path $runtimeEnv) {
+    . $runtimeEnv -RootPath (Split-Path -Parent $PSScriptRoot)
 }
 
-$adbCmd = Get-Command adb -ErrorAction SilentlyContinue
-if (-not $adbCmd) {
-    Write-Host "[ERROR] ADB not in PATH" -ForegroundColor Red
-    Write-Host "        Expected at: $platformTools" -ForegroundColor Yellow
-    exit 1
-}
-
-# Get connected devices
-Write-Host "[*] Checking USB devices..." -ForegroundColor Cyan
-$adbOut = adb devices
-$deviceCount = 0
-foreach ($line in ($adbOut | Select-Object -Skip 1)) {
-    if ($line -match "device" -and $line -notmatch "List") {
-        $deviceCount++
+function Add-PathIfExists {
+    param([string]$PathToAdd)
+    if ((Test-Path $PathToAdd) -and ($env:Path -notlike "*$PathToAdd*")) {
+        $env:Path = $env:Path + ";" + $PathToAdd
     }
 }
 
-if ($deviceCount -gt 0) {
-    Write-Host "[OK] Found $deviceCount device(s)" -ForegroundColor Green
-    Write-Host "[*] Setting up USB tunnel (adb reverse)..." -ForegroundColor Cyan
-    adb reverse --remove-all | Out-Null
-    adb reverse tcp:9001 tcp:9001
-    Write-Host "[OK] Reverse tcp:9001 ready" -ForegroundColor Green
-    Write-Host "     Tablet will use 127.0.0.1:9001" -ForegroundColor Gray
+function Resolve-AdbPath {
+    param([string]$Root)
+
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"),
+        (Join-Path $env:USERPROFILE "AppData\Local\Android\Sdk\platform-tools\adb.exe"),
+        (Join-Path $Root "adb.exe")
+    )
+
+    if ($env:ANDROID_SDK_ROOT) {
+        $candidates += (Join-Path $env:ANDROID_SDK_ROOT "platform-tools\adb.exe")
+    }
+    if ($env:ANDROID_HOME) {
+        $candidates += (Join-Path $env:ANDROID_HOME "platform-tools\adb.exe")
+    }
+
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    $adbCmd = Get-Command adb -ErrorAction SilentlyContinue
+    if ($adbCmd) {
+        return $adbCmd.Source
+    }
+
+    return $null
+}
+
+function Parse-ConnectedDevices {
+    param([string[]]$AdbDevicesLines)
+
+    $devices = @()
+    foreach ($line in ($AdbDevicesLines | Select-Object -Skip 1)) {
+        if (-not $line) { continue }
+        $trimmed = $line.Trim()
+        if ($trimmed -eq "") { continue }
+        if ($trimmed -like "List of devices*") { continue }
+        if ($trimmed -match "\sdevice($|\s)") {
+            $parts = $trimmed -split "\s+"
+            if ($parts.Count -gt 0) {
+                $serial = $parts[0]
+                $details = if ($parts.Count -gt 1) { ($parts | Select-Object -Skip 1) -join " " } else { "" }
+                $devices += [PSCustomObject]@{
+                    Serial  = $serial
+                    Details = $details
+                }
+            }
+        }
+    }
+    # Force array return so a single device is not unwrapped to a scalar object.
+    return ,$devices
+}
+
+function Resolve-HostExePath {
+    param([string]$Root)
+
+    $candidates = @(
+        (Join-Path $Root "host-windows\target\release\host-windows.exe"),
+        (Join-Path $Root "host-windows.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Resolve-ApkPath {
+    param([string]$Root)
+
+    $candidates = @(
+        (Join-Path $Root "android-client\app\build\outputs\apk\debug\app-debug.apk"),
+        (Join-Path $Root "FlexDisplay.apk")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Test-AppInstalled {
+    param(
+        [string]$AdbPath,
+        [string]$Serial,
+        [string]$PackageName
+    )
+
+    $pmOut = & $AdbPath -s $Serial shell pm path $PackageName 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    foreach ($line in $pmOut) {
+        if ($line -match "^package:") {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+$root = Split-Path -Parent $PSScriptRoot
+Add-PathIfExists (Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools")
+Add-PathIfExists (Join-Path $env:USERPROFILE "AppData\Local\Android\Sdk\platform-tools")
+
+$adbPath = Resolve-AdbPath -Root $root
+if (-not $adbPath) {
+    Write-Host "[ERROR] ADB was not found." -ForegroundColor Red
+    Write-Host "        Install Android platform-tools or run scripts\setup.ps1 -Full" -ForegroundColor Yellow
+    exit 1
+}
+
+Write-Host "[*] Using ADB: $adbPath" -ForegroundColor Gray
+
+# Detect connected devices
+Write-Host "[*] Checking USB devices..." -ForegroundColor Cyan
+$adbOut = & $adbPath devices -l
+$devices = @(Parse-ConnectedDevices -AdbDevicesLines $adbOut)
+
+$selectedSerial = $null
+if ($devices.Count -eq 0) {
+    Write-Host "[WARN] No USB devices found. Host will still start." -ForegroundColor Yellow
+    Write-Host "       Connect a device and run START.bat again for auto-setup." -ForegroundColor Yellow
+} elseif ($devices.Count -eq 1) {
+    $selectedSerial = $devices[0].Serial
+    Write-Host "[OK] Found 1 device: $selectedSerial" -ForegroundColor Green
 } else {
-    Write-Host "[!] No USB devices found" -ForegroundColor Yellow
+    Write-Host "[OK] Found $($devices.Count) devices:" -ForegroundColor Green
+    for ($i = 0; $i -lt $devices.Count; $i++) {
+        $d = $devices[$i]
+        Write-Host ("  " + ($i + 1) + ") " + $d.Serial + " " + $d.Details) -ForegroundColor Gray
+    }
+
+    $pick = Read-Host "Choose device [1-$($devices.Count)]"
+    $idx = 0
+    if (-not [int]::TryParse($pick, [ref]$idx) -or $idx -lt 1 -or $idx -gt $devices.Count) {
+        Write-Host "[WARN] Invalid selection. Using first device." -ForegroundColor Yellow
+        $idx = 1
+    }
+    $selectedSerial = $devices[$idx - 1].Serial
+    Write-Host "[OK] Selected: $selectedSerial" -ForegroundColor Green
+}
+
+if ($selectedSerial) {
+    $packageName = "com.example.tabletmonitor"
+    $forceInstall = $ForceInstallApk -or ($env:FLEXDISPLAY_FORCE_APK_INSTALL -eq "1")
+    $appInstalled = Test-AppInstalled -AdbPath $adbPath -Serial $selectedSerial -PackageName $packageName
+
+    $apkPath = Resolve-ApkPath -Root $root
+    if ($apkPath) {
+        if ($appInstalled -and (-not $forceInstall)) {
+            Write-Host "[OK] App already installed. Skipping APK install." -ForegroundColor Green
+            Write-Host "     To force reinstall: run scripts\start-usb.ps1 -ForceInstallApk" -ForegroundColor Gray
+        } else {
+            Write-Host "[*] Installing app on device..." -ForegroundColor Cyan
+            $installOutput = & $adbPath -s $selectedSerial install -r $apkPath 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[OK] App installed/updated" -ForegroundColor Green
+            } else {
+                Write-Host "[WARN] APK install failed. Continuing anyway." -ForegroundColor Yellow
+                $installOutput | ForEach-Object { Write-Host "       $_" -ForegroundColor DarkYellow }
+            }
+        }
+    } else {
+        if ($appInstalled) {
+            Write-Host "[OK] App already installed on device." -ForegroundColor Green
+            Write-Host "     APK file not found locally, skipping install." -ForegroundColor Gray
+        } else {
+            Write-Host "[WARN] APK not found." -ForegroundColor Yellow
+            Write-Host "       Expected one of:" -ForegroundColor Yellow
+            Write-Host "       - android-client\app\build\outputs\apk\debug\app-debug.apk" -ForegroundColor DarkYellow
+            Write-Host "       - FlexDisplay.apk" -ForegroundColor DarkYellow
+            Write-Host "       App is not installed on device, so connection may fail." -ForegroundColor Yellow
+        }
+    }
+
+    Write-Host "[*] Setting up USB tunnel (adb reverse)..." -ForegroundColor Cyan
+    & $adbPath -s $selectedSerial reverse --remove-all | Out-Null
+    & $adbPath -s $selectedSerial reverse tcp:9001 tcp:9001 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK] Reverse tcp:9001 ready" -ForegroundColor Green
+        Write-Host "     Device will use 127.0.0.1:9001" -ForegroundColor Gray
+    } else {
+        Write-Host "[WARN] Could not configure adb reverse automatically." -ForegroundColor Yellow
+    }
+
+    Write-Host "[*] Launching Android app..." -ForegroundColor Cyan
+    & $adbPath -s $selectedSerial shell monkey -p $packageName -c android.intent.category.LAUNCHER 1 | Out-Null
 }
 
 Write-Host ""
@@ -54,29 +239,25 @@ foreach ($ownerPid in $portOwners) {
     }
 }
 
-$root = Split-Path -Parent $PSScriptRoot
-cd "$root\host-windows"
 $env:TABLET_MONITOR_LISTEN = '127.0.0.1'
 $env:TABLET_MONITOR_FPS = '60'
 
-# If a stale AMF preference was persisted, clear it for USB startup stability.
-$settingsPath = Join-Path $root "host-windows\target\release\host-settings.json"
-if (Test-Path $settingsPath) {
-    try {
-        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
-        if ($settings.preferred_encoder -eq 'h264_amf') {
-            $settings.preferred_encoder = $null
-            $settings.preferred_amf_device = $null
-            $settings | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 $settingsPath
-            Write-Host "[INFO] Cleared persisted AMF preference for stable USB startup" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host "[WARN] Could not parse host-settings.json; continuing with runtime fallback" -ForegroundColor Yellow
-    }
+$hostExe = Resolve-HostExePath -Root $root
+if ($hostExe) {
+    $hostDir = Split-Path -Parent $hostExe
+    Set-Location $hostDir
+    & $hostExe
+    exit $LASTEXITCODE
 }
 
-if (Test-Path ".\target\release\host-windows.exe") {
-    .\target\release\host-windows.exe
-} else {
+if (Test-Path (Join-Path $root "host-windows\Cargo.toml")) {
+    Set-Location (Join-Path $root "host-windows")
     cargo run --release
+    exit $LASTEXITCODE
 }
+
+Write-Host "[ERROR] Host executable not found." -ForegroundColor Red
+Write-Host "        Expected one of:" -ForegroundColor Red
+Write-Host "        - host-windows\target\release\host-windows.exe" -ForegroundColor DarkRed
+Write-Host "        - host-windows.exe" -ForegroundColor DarkRed
+exit 1

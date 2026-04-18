@@ -1,4 +1,4 @@
-# setup.ps1 - Automated Setup Script for Tablet Second Monitor Project
+# setup.ps1 - Automated Setup Script for FlexDisplay Project
 # Purpose: Install all dependencies and verify environment
 # Usage: .\setup.ps1 [-Install] [-Verify] [-Full]
 
@@ -11,7 +11,7 @@ param(
 # If no parameters, show help
 if (-not $Install -and -not $Verify -and -not $Full) {
     Write-Host @"
-Tablet Second Monitor - Setup Script
+FlexDisplay - Setup Script
 
 Usage:
   .\setup.ps1 -Verify       # Check if all dependencies are installed
@@ -30,7 +30,7 @@ Options:
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 Write-Host "================================================"
-Write-Host "Tablet Second Monitor - Setup Script"
+Write-Host "FlexDisplay - Setup Script"
 Write-Host "================================================`n"
 
 # Define dependencies
@@ -81,7 +81,7 @@ foreach ($dep in $dependencies.GetEnumerator()) {
     $name = $dep.Name
     $testCmd = $dep.Value.test
     $category = $dep.Value.category
-    
+
     try {
         $output = & $testCmd 2>&1 | Select-Object -First 1
         $results.installed += @{ name = $name; version = $output; category = $category }
@@ -92,8 +92,8 @@ foreach ($dep in $dependencies.GetEnumerator()) {
         $status = "✗ Missing"
         $color = "Yellow"
     }
-    
-    Write-Host "  [$color]$status[0m $name" -ForegroundColor @($color, $null)[0]
+
+    Write-Host "  $status $name" -ForegroundColor $color
 }
 
 # Summary
@@ -132,9 +132,9 @@ if ($Install -or $Full) {
         Write-Host "`n================================================"
         Write-Host "Installing Missing Dependencies..." -ForegroundColor Cyan
         Write-Host "================================================"
-        
+
         $requiredMissing = $results.missing | Where-Object { $_.category -eq "required" }
-        
+
         if ($requiredMissing.Count -gt 0) {
             Write-Host "`nREQUIRED PACKAGES (User Action Needed):" -ForegroundColor Red
             foreach ($item in $requiredMissing) {
@@ -198,7 +198,7 @@ $nextSteps = @"
    cd host-windows
    cargo run
 
-6. Connect on Tablet:
+6. Connect on Device:
    - Launch app
     - Tap "Connect"
    - Video should appear

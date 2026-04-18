@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Tablet Monitor</string>
-    <string name="app_subtitle">Use your tablet as a second PC monitor</string>
+    <string name="app_name">FlexDisplay</string>
+    <string name="app_subtitle">Use your Android device as a second PC monitor</string>
 
     <!-- Connection card -->
     <string name="section_connection">CONNECTION</string>
@@ -46,7 +46,10 @@
     <string name="status_reopened_stream">Status: reopening stream…</string>
     <string name="profile_pending">profile: pending</string>
     <string name="profile_waiting_host_cfg">profile: waiting host config</string>
+    <string name="profile_active_format">profile: %1$s  •  %2$s  •  %3$sfps  •  %4$s kbps</string>
+    <string name="profile_changed_log">Profile updated: %1$s</string>
     <string name="resolution_pending">resolution pending  •  %1$d kbps rx</string>
+    <string name="logo_content_desc">FlexDisplay logo</string>
 
     <!-- Log defaults -->
     <string name="log_default">— log —</string>
@@ -55,18 +58,18 @@
     <string name="help_title">Help</string>
     <string name="help_content"><![CDATA[
 <b>Quick start (USB - recommended)</b><br/>
-1. Connect your tablet to the PC with a USB cable.<br/>
+1. Connect your Android device to the PC with a USB cable.<br/>
 2. Run <b>START.bat</b> on the PC and choose <b>USB</b>.<br/>
 3. In this app, keep IP as <b>127.0.0.1</b> and tap <b>Connect</b>.<br/><br/>
 
 <b>Quick start (Wi-Fi)</b><br/>
-1. Connect PC and tablet to the same Wi-Fi.<br/>
+1. Connect PC and device to the same Wi-Fi.<br/>
 2. Run <b>START.bat</b> and choose <b>Wi-Fi</b>.<br/>
 3. Enter your PC IP in this app and tap <b>Connect</b>.<br/><br/>
 
 <b>Mode</b><br/>
 • <b>Mirror</b>: clone your main monitor.<br/>
-• <b>Extended</b>: use tablet as a second monitor.<br/><br/>
+• <b>Extended</b>: use your device as a second monitor.<br/><br/>
 
 <b>Target monitor</b><br/>
 Leave empty for automatic selection.<br/>

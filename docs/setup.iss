@@ -1,17 +1,18 @@
-; Tablet Monitor - Inno Setup Script
+; FlexDisplay - Inno Setup Script
 ; Script de instalación para usuarios no técnicos
 
 [Setup]
-AppName=Tablet Monitor
+AppName=FlexDisplay
 AppVersion=1.0.0
-AppPublisher=Tablet Monitor Project
-AppPublisherURL=https://github.com/FitzVB/tablet-second-monitor
-AppSupportURL=https://github.com/FitzVB/tablet-second-monitor
-AppUpdatesURL=https://github.com/FitzVB/tablet-second-monitor/releases
-DefaultDirName={pf}\Tablet Monitor
-DefaultGroupName=Tablet Monitor
+AppPublisher=FlexDisplay Project
+AppPublisherURL=https://github.com/FitzVB/FlexDisplay
+AppSupportURL=https://github.com/FitzVB/FlexDisplay
+AppUpdatesURL=https://github.com/FitzVB/FlexDisplay/releases
+AppId={{F9E1C5D0-9E0A-4B6E-8A16-4D5FD94B1AF2}
+DefaultDirName={pf}\FlexDisplay
+DefaultGroupName=FlexDisplay
 OutputDir=.\dist
-OutputBaseFilename=TabletMonitor-Setup
+OutputBaseFilename=FlexDisplay-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -52,12 +53,12 @@ Source: "drivers\virtual-display\*"; DestDir: "{app}\drivers\virtual-display"; F
 
 [Icons]
 ; Start menu icon
-Name: "{group}\Tablet Monitor"; Filename: "{app}\START.bat"; WorkingDir: "{app}"; IconIndex: 0
-Name: "{group}\Detener Tablet Monitor"; Filename: "{app}\STOP.bat"; WorkingDir: "{app}"; IconIndex: 0
+Name: "{group}\FlexDisplay"; Filename: "{app}\START.bat"; WorkingDir: "{app}"; IconIndex: 0
+Name: "{group}\Detener FlexDisplay"; Filename: "{app}\STOP.bat"; WorkingDir: "{app}"; IconIndex: 0
 Name: "{group}\Ver Guía"; Filename: "notepad.exe"; Parameters: """{app}\GUIDE.txt"""; IconIndex: 0
 Name: "{group}\Desinstalar"; Filename: "{uninstallexe}"
 ; Desktop icon (si el usuario lo elige)
-Name: "{userdesktop}\Tablet Monitor"; Filename: "{app}\START.bat"; WorkingDir: "{app}"; Tasks: desktopicon; IconIndex: 0
+Name: "{userdesktop}\FlexDisplay"; Filename: "{app}\START.bat"; WorkingDir: "{app}"; Tasks: desktopicon; IconIndex: 0
 
 [Run]
 ; No ejecutar nada automáticamente después de la instalación

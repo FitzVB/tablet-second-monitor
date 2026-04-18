@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.TabletMonitor" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="colorPrimary">#1976D2</item>
-        <item name="colorPrimaryDark">#0D47A1</item>
-        <item name="colorAccent">#42A5F5</item>
+    <style name="Theme.FlexDisplay" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/fd_deep_blue</item>
+        <item name="colorPrimaryDark">@color/fd_deep_blue_dark</item>
+        <item name="colorAccent">@color/fd_aqua_cyan</item>
         <!-- Transparent window background: lets SurfaceView render in its own hardware
              overlay layer (below the window) without being covered by the theme color.
              This allows normal View overlays (HUD TextView) to work above the video

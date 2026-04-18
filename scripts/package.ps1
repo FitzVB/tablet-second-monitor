@@ -1,292 +1,329 @@
 #Requires -Version 5.1
-<#
+<#!
 .SYNOPSIS
-    Build and package Tablet Monitor into a distribution-ready ZIP.
+Create a lightweight precompiled distribution package.
 
 .DESCRIPTION
-    1. Compila host-windows.exe con cargo build --release
-    2. Descarga FFmpeg estatico (BtbN) si no existe en cache
-    3. Descarga ADB platform-tools si no existe en cache
-    4. Copia todo en dist/TabletMonitor-vX.X.X-windows/
-    5. Genera el ZIP
+- Builds host executable in release mode.
+- Optionally builds Android debug APK (or reuses existing one).
+- Bundles minimal runtime dependencies (ADB + FFmpeg).
+- Copies startup scripts and creates ZIP under dist/.
 
 .PARAMETER Version
-    Package version. Defaults to Cargo.toml.
+Optional package version override. Defaults to host-windows/Cargo.toml version.
+
+.PARAMETER BuildAndroid
+Build Android APK before packaging.
+
 .PARAMETER SkipAndroid
-    Skip Android APK build (requires Android SDK + Gradle).
+Do not include Android APK.
+
 .PARAMETER CacheDir
-    Directory used for cached downloads (avoids re-downloading). Default: .cache
+Download cache directory. Default: .cache
+
+.PARAMETER OutputDir
+Distribution output directory. Default: dist
+
+.PARAMETER SkipBundledRuntime
+Do not include ADB/FFmpeg binaries in package. Runtime is downloaded on first run.
 #>
 param(
-    [string]$Version         = "",
+    [string]$Version = "",
+    [switch]$BuildAndroid,
     [switch]$SkipAndroid,
-    [string]$CacheDir        = (Join-Path $PSScriptRoot ".cache")
+    [switch]$SkipBundledRuntime,
+    [string]$CacheDir = "",
+    [string]$OutputDir = ""
 )
 
 $ErrorActionPreference = "Stop"
-$ProgressPreference    = "SilentlyContinue"   # Makes Invoke-WebRequest much faster
+$ProgressPreference = "SilentlyContinue"
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-function Write-Step([string]$msg) {
-    Write-Host ""
-    Write-Host "==> $msg" -ForegroundColor Cyan
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+if (-not $CacheDir) {
+    $CacheDir = Join-Path $RepoRoot ".cache"
+}
+if (-not $OutputDir) {
+    $OutputDir = Join-Path $RepoRoot "dist"
 }
 
-function Write-Ok([string]$msg) {
-    Write-Host "    [OK] $msg" -ForegroundColor Green
+function Write-Step([string]$Message) {
+    Write-Host "`n==> $Message" -ForegroundColor Cyan
 }
 
-function Assert-Command([string]$cmd) {
-    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
-        throw "Missing '$cmd'. Install it and add it to PATH before packaging."
+function Write-Ok([string]$Message) {
+    Write-Host "    [OK] $Message" -ForegroundColor Green
+}
+
+function Assert-Command([string]$Command) {
+    if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
+        throw "Missing command: $Command"
     }
 }
 
-# Download with progress
-function Invoke-Download([string]$url, [string]$dest) {
-    if (Test-Path $dest) {
-        Write-Ok "Cache hit: $(Split-Path $dest -Leaf)"
+function Invoke-Download([string]$Url, [string]$Dest) {
+    if (Test-Path $Dest) {
+        Write-Ok "Cache hit: $(Split-Path $Dest -Leaf)"
         return
     }
-    Write-Host "    Downloading: $url"
-    $tmp = "$dest.tmp"
+
+    Write-Host "    Downloading $(Split-Path $Dest -Leaf)"
+    $tmp = "$Dest.tmp"
+    Invoke-WebRequest -Uri $Url -OutFile $tmp -UseBasicParsing
+    Move-Item $tmp $Dest -Force
+}
+
+function Get-VersionFromCargo {
+    $cargoToml = Join-Path $RepoRoot "host-windows\Cargo.toml"
+    if (-not (Test-Path $cargoToml)) {
+        return "0.0.0"
+    }
+
+    $line = Select-String -Path $cargoToml -Pattern 'version\s*=\s*"([^"]+)"' | Select-Object -First 1
+    if ($line) {
+        return $line.Matches[0].Groups[1].Value
+    }
+
+    return "0.0.0"
+}
+
+function Build-HostRelease {
+    Write-Step "Building host (release)"
+    Assert-Command "cargo"
+
+    Push-Location (Join-Path $RepoRoot "host-windows")
     try {
-        Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing
-        Move-Item $tmp $dest
-    } catch {
-        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
-        throw "Download failed: $url`n$_"
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Resolve version from Cargo.toml
-# ---------------------------------------------------------------------------
-if (-not $Version) {
-    $cargoToml = Join-Path $PSScriptRoot "host-windows\Cargo.toml"
-    if (Test-Path $cargoToml) {
-        $versionLine = Select-String 'version\s*=\s*"([^"]+)"' $cargoToml | Select-Object -First 1
-        if ($versionLine) {
-            $Version = $versionLine.Matches[0].Groups[1].Value
+        cargo build --release
+        if ($LASTEXITCODE -ne 0) {
+            throw "cargo build --release failed"
         }
+    } finally {
+        Pop-Location
     }
-    if (-not $Version) { $Version = "0.0.0" }
-}
 
-$distName   = "TabletMonitor-v$Version-windows"
-$distDir    = Join-Path $PSScriptRoot "dist\$distName"
-$zipPath    = Join-Path $PSScriptRoot "dist\$distName.zip"
-
-Write-Step "Tablet Monitor packager  —  version $Version"
-Write-Host "  Destination:  $distDir"
-Write-Host "  ZIP:      $zipPath"
-
-# ---------------------------------------------------------------------------
-# Prerequisites
-# ---------------------------------------------------------------------------
-Write-Step "Checking build tools"
-Assert-Command "cargo"
-New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
-
-# ---------------------------------------------------------------------------
-# 1. Build Rust host
-# ---------------------------------------------------------------------------
-Write-Step "Compilando host-windows (release)"
-$hostSrc = Join-Path $PSScriptRoot "host-windows"
-if (-not (Test-Path $hostSrc)) {
-    throw "host-windows/ directory not found. Run this script from the repository root."
-}
-Push-Location $hostSrc
-try {
-    cargo build --release
-    if ($LASTEXITCODE -ne 0) { throw "cargo build --release failed (exit code $LASTEXITCODE)" }
-    Write-Ok "host-windows.exe built"
-} finally {
-    Pop-Location
-}
-
-# ---------------------------------------------------------------------------
-# 2. Download FFmpeg (BtbN static GPL build)
-# ---------------------------------------------------------------------------
-Write-Step "Fetching static FFmpeg"
-$ffmpegZip   = Join-Path $CacheDir "ffmpeg-win64.zip"
-$ffmpegUrl   = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-Invoke-Download -url $ffmpegUrl -dest $ffmpegZip
-
-$ffmpegCache = Join-Path $CacheDir "ffmpeg"
-if (-not (Test-Path (Join-Path $ffmpegCache "ffmpeg.exe"))) {
-    Write-Host "    Extracting FFmpeg..."
-    Remove-Item $ffmpegCache -Recurse -Force -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force -Path $ffmpegCache | Out-Null
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = [System.IO.Compression.ZipFile]::OpenRead($ffmpegZip)
-    foreach ($entry in $zip.Entries) {
-        # Only extract bin/ subdirectory contents
-        if ($entry.FullName -match "/bin/ffmpeg\.exe$") {
-            $destFile = Join-Path $ffmpegCache "ffmpeg.exe"
-            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
-        }
+    $hostExe = Join-Path $RepoRoot "host-windows\target\release\host-windows.exe"
+    if (-not (Test-Path $hostExe)) {
+        throw "host-windows.exe not found after build"
     }
-    $zip.Dispose()
+
+    Write-Ok "Host binary ready"
+    return $hostExe
 }
-Write-Ok "ffmpeg.exe ready"
 
-# ---------------------------------------------------------------------------
-# 3. Download ADB platform-tools
-# ---------------------------------------------------------------------------
-Write-Step "Fetching ADB platform-tools"
-$adbZip   = Join-Path $CacheDir "platform-tools-windows.zip"
-$adbUrl   = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
-Invoke-Download -url $adbUrl -dest $adbZip
+function Resolve-ApkPath {
+    $apk = Join-Path $RepoRoot "android-client\app\build\outputs\apk\debug\app-debug.apk"
 
-$adbCache = Join-Path $CacheDir "adb"
-$adbNeeded = @("adb.exe","AdbWinApi.dll","AdbWinUsbApi.dll")
-$allAdbPresent = $adbNeeded | ForEach-Object { Test-Path (Join-Path $adbCache $_) }
-if ($allAdbPresent -contains $false) {
-    Write-Host "    Extracting ADB..."
-    Remove-Item $adbCache -Recurse -Force -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Force -Path $adbCache | Out-Null
-    $zip = [System.IO.Compression.ZipFile]::OpenRead($adbZip)
-    foreach ($entry in $zip.Entries) {
-        $leaf = [System.IO.Path]::GetFileName($entry.FullName)
-        if ($adbNeeded -contains $leaf) {
-            $destFile = Join-Path $adbCache $leaf
-            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
-        }
-    }
-    $zip.Dispose()
-}
-Write-Ok "adb.exe ready"
-
-# ---------------------------------------------------------------------------
-# 4. (Optional) Build Android APK
-# ---------------------------------------------------------------------------
-$apkSrc = $null
-if (-not $SkipAndroid) {
-    Write-Step "Building Android APK (debug)"
-    $androidDir = Join-Path $PSScriptRoot "android-client"
-    if (Test-Path $androidDir) {
-        Push-Location $androidDir
+    if ($BuildAndroid) {
+        Write-Step "Building Android APK (debug)"
+        Push-Location (Join-Path $RepoRoot "android-client")
         try {
-            $gradlew = if ($IsWindows -or $PSVersionTable.Platform -ne "Unix") { ".\gradlew.bat" } else { "./gradlew" }
-            & $gradlew assembleDebug
+            .\gradlew.bat assembleDebug
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "    WARN: gradle failed. APK will not be included in the package." -ForegroundColor Yellow
-            } else {
-                $apkFile = Get-ChildItem -Path "app\build\outputs\apk\debug\*.apk" |
-                           Sort-Object LastWriteTime -Descending | Select-Object -First 1
-                if ($apkFile) {
-                    $apkSrc = $apkFile.FullName
-                    Write-Ok "APK: $($apkFile.Name)"
-                }
+                throw "Android build failed"
             }
-        } catch {
-            Write-Host "    WARN: Could not build APK: $_" -ForegroundColor Yellow
         } finally {
             Pop-Location
         }
-    } else {
-        Write-Host "    android-client/ directory not found, skipping APK." -ForegroundColor Yellow
     }
-} else {
-    Write-Host "    --SkipAndroid specified, skipping Android build."
+
+    if (Test-Path $apk) {
+        Write-Ok "APK ready"
+        return $apk
+    }
+
+    if ($SkipAndroid) {
+        Write-Ok "Skipping APK (SkipAndroid)"
+        return $null
+    }
+
+    Write-Host "    [WARN] APK not found; package will be created without APK" -ForegroundColor Yellow
+    return $null
 }
 
-# ---------------------------------------------------------------------------
-# 5. Assemble distribution directory
-# ---------------------------------------------------------------------------
-Write-Step "Assembling distribution package"
+function Extract-FromZipByLeaf {
+    param(
+        [string]$ZipPath,
+        [hashtable]$LeafToDestination
+    )
 
-if (Test-Path $distDir) { Remove-Item $distDir -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $distDir | Out-Null
-
-# Host binary
-Copy-Item (Join-Path $hostSrc "target\release\host-windows.exe") (Join-Path $distDir "host-windows.exe")
-
-# FFmpeg
-Copy-Item (Join-Path $ffmpegCache "ffmpeg.exe") (Join-Path $distDir "ffmpeg.exe")
-
-# ADB + DLLs
-foreach ($f in $adbNeeded) {
-    $src = Join-Path $adbCache $f
-    if (Test-Path $src) { Copy-Item $src (Join-Path $distDir $f) }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        foreach ($entry in $zip.Entries) {
+            $leaf = [System.IO.Path]::GetFileName($entry.FullName)
+            if (-not $leaf) { continue }
+            if ($LeafToDestination.ContainsKey($leaf)) {
+                $dest = $LeafToDestination[$leaf]
+                $destDir = Split-Path -Parent $dest
+                if (-not (Test-Path $destDir)) {
+                    New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+                }
+                [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
+            }
+        }
+    } finally {
+        $zip.Dispose()
+    }
 }
 
-# APK
-if ($apkSrc -and (Test-Path $apkSrc)) {
-    Copy-Item $apkSrc (Join-Path $distDir "TabletMonitor.apk")
+function Prepare-MinRuntime {
+    param([string]$DistRoot)
+
+    Write-Step "Preparing minimal runtime (ADB + FFmpeg)"
+    New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
+
+    $adbZip = Join-Path $CacheDir "platform-tools-windows.zip"
+    $ffZip = Join-Path $CacheDir "ffmpeg-win64-gyan-release.zip"
+
+    Invoke-Download -Url "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" -Dest $adbZip
+    # Prefer stable release builds over bleeding-edge master to improve NVENC
+    # compatibility on machines with slightly older NVIDIA drivers.
+    Invoke-Download -Url "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -Dest $ffZip
+
+    $adbRoot = Join-Path $DistRoot ".runtime\adb\platform-tools"
+    $ffRoot = Join-Path $DistRoot ".runtime\ffmpeg\bin"
+
+    $adbMap = @{
+        "adb.exe" = (Join-Path $adbRoot "adb.exe")
+        "AdbWinApi.dll" = (Join-Path $adbRoot "AdbWinApi.dll")
+        "AdbWinUsbApi.dll" = (Join-Path $adbRoot "AdbWinUsbApi.dll")
+    }
+
+    Extract-FromZipByLeaf -ZipPath $adbZip -LeafToDestination $adbMap
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ffZip)
+    try {
+        $ffmpegDest = Join-Path $ffRoot "ffmpeg.exe"
+        foreach ($entry in $zip.Entries) {
+            if ($entry.FullName -match "/bin/ffmpeg\.exe$") {
+                $ffDir = Split-Path -Parent $ffmpegDest
+                if (-not (Test-Path $ffDir)) {
+                    New-Item -ItemType Directory -Path $ffDir -Force | Out-Null
+                }
+                [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $ffmpegDest, $true)
+                break
+            }
+        }
+    } finally {
+        $zip.Dispose()
+    }
+
+    if (-not (Test-Path (Join-Path $adbRoot "adb.exe"))) {
+        throw "Failed to prepare runtime ADB"
+    }
+    if (-not (Test-Path (Join-Path $ffRoot "ffmpeg.exe"))) {
+        throw "Failed to prepare runtime FFmpeg"
+    }
+
+    Write-Ok "Runtime files ready"
 }
 
-# Launcher scripts
-Copy-Item (Join-Path $PSScriptRoot "START.bat") (Join-Path $distDir "START.bat")
-Copy-Item (Join-Path $PSScriptRoot "STOP.bat")  (Join-Path $distDir "STOP.bat")
+function Copy-RequiredFiles {
+    param(
+        [string]$DistRoot,
+        [string]$HostExe,
+        [string]$ApkPath
+    )
 
-# Guide
-$guideContent = @"
-============================================================
-    TABLET MONITOR - Quick usage guide
-  version $Version
-============================================================
+    Write-Step "Copying package files"
+    New-Item -ItemType Directory -Force -Path (Join-Path $DistRoot "scripts") | Out-Null
 
-REQUIREMENTS
-    - Windows 10/11 PC
-    - Android tablet/phone 5.0+
-    - USB data cable (not charge-only)
-    - TabletMonitor app installed on tablet
+    Copy-Item $HostExe (Join-Path $DistRoot "host-windows.exe") -Force
 
-FIRST RUN - USB SETUP
-    1. On tablet: Settings -> Developer options ->
-         enable "USB debugging"
-    2. Connect the tablet to the PC with USB cable
-    3. On tablet: accept the "Allow USB debugging" prompt
-         (enable "Always trust" to avoid repeated prompts)
+    if ($ApkPath -and (Test-Path $ApkPath)) {
+        Copy-Item $ApkPath (Join-Path $DistRoot "FlexDisplay.apk") -Force
+    }
 
-DAILY USE
-    1. Connect the tablet over USB
-    2. Double-click START.bat
-    3. Open the app on tablet and tap "Connect"
-    4. To stop: close the host window or run STOP.bat
+    Copy-Item (Join-Path $RepoRoot "START.bat") (Join-Path $DistRoot "START.bat") -Force
 
-WIFI MODE (NO CABLE)
-    1. PC and tablet must be on the same Wi-Fi network
-    2. Open the app on tablet
-    3. Enter the PC local IP in "PC IP"
-         (check via ipconfig on the PC, look for IPv4)
-    4. Tap "Connect"
+    $scriptFiles = @(
+        "launcher.ps1",
+        "ensure-runtime.ps1",
+        "runtime-env.ps1",
+        "start-usb.ps1",
+        "start-wifi.ps1",
+        "stop-usb.ps1",
+        "install-virtual-display.ps1",
+        "remove-virtual-display.ps1",
+        "STOP.bat"
+    )
 
-MULTI-MONITOR
-    - In the app "Disp" field, enter 0, 1, 2...
-        to choose which monitor is streamed.
+    foreach ($file in $scriptFiles) {
+        $src = Join-Path $RepoRoot "scripts\$file"
+        if (Test-Path $src) {
+            Copy-Item $src (Join-Path $DistRoot "scripts\$file") -Force
+        }
+    }
 
-COMMON ISSUES
-    - "adb not found": verify the tablet is connected
-        and USB debugging authorization was accepted
-    - No image on tablet: reconnect cable and restart START.bat
-    - Choppy image: lower URL quality settings
-        or use a higher quality USB cable
+    if (Test-Path (Join-Path $RepoRoot "README.md")) {
+        Copy-Item (Join-Path $RepoRoot "README.md") (Join-Path $DistRoot "README.md") -Force
+    }
 
-============================================================
+    $quick = @"
+FlexDisplay - Lightweight distribution
+
+1. Run START.bat
+2. Select USB or Wi-Fi mode
+3. In USB mode, APK is auto-installed when a device is connected
+
+Runtime:
+- If bundled: .runtime\\adb and .runtime\\ffmpeg are already included
+- If not bundled: they are downloaded automatically on first launch from official sources
+
+Notes:
+- Virtual display driver is installed at system level.
+- If this is the first time installing virtual display support, reboot once if needed.
 "@
-$guideContent | Set-Content (Join-Path $distDir "GUIDE.txt") -Encoding UTF8
+    Set-Content -Path (Join-Path $DistRoot "QUICK_START.txt") -Value $quick -Encoding UTF8
 
-Write-Ok "Folder ready: $distDir"
+    Write-Ok "Files copied"
+}
 
-# ---------------------------------------------------------------------------
-# 6. Create ZIP
-# ---------------------------------------------------------------------------
+function Measure-DirMB([string]$Path) {
+    if (-not (Test-Path $Path)) { return 0 }
+    $sum = (Get-ChildItem -LiteralPath $Path -Recurse -File | Measure-Object Length -Sum).Sum
+    return [math]::Round($sum / 1MB, 1)
+}
+
+if (-not $Version) {
+    $Version = Get-VersionFromCargo
+}
+
+$distName = "FlexDisplay-v$Version-windows-lite"
+$distRoot = Join-Path $OutputDir $distName
+$zipPath = Join-Path $OutputDir "$distName.zip"
+
+Write-Step "Packaging lightweight precompiled distribution"
+Write-Host "    Version: $Version"
+Write-Host "    Dist dir: $distRoot"
+
+if (Test-Path $distRoot) {
+    Remove-Item $distRoot -Recurse -Force
+}
+if (Test-Path $zipPath) {
+    Remove-Item $zipPath -Force
+}
+
+$hostExe = Build-HostRelease
+$apkPath = Resolve-ApkPath
+if (-not $SkipBundledRuntime) {
+    Prepare-MinRuntime -DistRoot $distRoot
+} else {
+    Write-Step "Skipping bundled runtime (will download on first run)"
+}
+Copy-RequiredFiles -DistRoot $distRoot -HostExe $hostExe -ApkPath $apkPath
+
 Write-Step "Creating ZIP"
-if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-[System.IO.Compression.ZipFile]::CreateFromDirectory($distDir, $zipPath)
-$sizeMB = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
-Write-Ok "ZIP created: $zipPath  ($sizeMB MB)"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($distRoot, $zipPath)
+
+$folderMB = Measure-DirMB $distRoot
+$zipMB = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host " PACKAGE READY" -ForegroundColor Green
-Write-Host " $zipPath" -ForegroundColor Green
+Write-Host "PACKAGE READY" -ForegroundColor Green
+Write-Host "Dist folder: $distRoot ($folderMB MB)" -ForegroundColor Green
+Write-Host "ZIP file:    $zipPath ($zipMB MB)" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "Para publicar en GitHub Releases:"
-Write-Host "  gh release create v$Version dist\$distName.zip --title 'v$Version' --notes 'Ver CHANGELOG.md'"

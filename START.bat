@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title Tablet Monitor
+title FlexDisplay
 
 :: Unified launcher - delegates to PowerShell script for better modularity
 :: This wrapper ensures cross-platform compatibility and consistent behavior

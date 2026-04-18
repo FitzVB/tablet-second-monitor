@@ -1,11 +1,11 @@
-# build.ps1 - Comprehensive build script for Tablet Monitor project
+# build.ps1 - Comprehensive build script for FlexDisplay project
 # Handles Rust host, Android client, and InnoSetup installer
 # Usage: .\build.ps1 -Target host|android|installer|all -Release [-Deploy] [-SkipAndroid] [-SkipSetup]
 
 param(
     [ValidateSet("host", "android", "installer", "all")]
     [string]$Target = "all",
-    
+
     [switch]$Release = $false,
     [switch]$Deploy = $false,
     [switch]$Clean = $false,
@@ -65,18 +65,18 @@ if ($missing.Count -gt 0) {
 # Download dependencies functions
 function Download-FFmpeg {
     Write-Header "Preparing FFmpeg"
-    
+
     $ffmpegExe = Join-Path $ScriptPath "ffmpeg.exe"
-    
+
     if (Test-Path $ffmpegExe) {
         Write-Success "ffmpeg.exe already present"
         return
     }
-    
+
     $cacheDir = Join-Path $ScriptPath ".build-cache"
     New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
     $ffmpegZip = Join-Path $cacheDir "ffmpeg.zip"
-    
+
     if (-not (Test-Path $ffmpegZip)) {
         Write-Info "Downloading FFmpeg (BtbN static GPL build)..."
         $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
@@ -88,7 +88,7 @@ function Download-FFmpeg {
             return
         }
     }
-    
+
     Write-Host "Extracting FFmpeg..."
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($ffmpegZip)
@@ -104,26 +104,26 @@ function Download-FFmpeg {
 
 function Download-ADB {
     Write-Header "Preparing ADB"
-    
+
     $adbNeeded = @("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")
     $allPresent = $true
-    
+
     foreach ($f in $adbNeeded) {
         if (-not (Test-Path (Join-Path $ScriptPath $f))) {
             $allPresent = $false
             break
         }
     }
-    
+
     if ($allPresent) {
         Write-Success "ADB files already present"
         return
     }
-    
+
     $cacheDir = Join-Path $ScriptPath ".build-cache"
     New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
     $adbZip = Join-Path $cacheDir "adb.zip"
-    
+
     if (-not (Test-Path $adbZip)) {
         Write-Info "Downloading platform-tools..."
         $url = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
@@ -135,7 +135,7 @@ function Download-ADB {
             return
         }
     }
-    
+
     Write-Host "Extracting ADB..."
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($adbZip)
@@ -187,24 +187,24 @@ if ($missing.Count -gt 0) {
 # Build functions
 function Build-Host {
     param([bool]$ReleaseMode)
-    
+
     Write-Header "Building Host (Rust)"
     $buildType = if ($ReleaseMode) { "Release" } else { "Debug" }
-    
+
     try {
         Push-Location "$ScriptPath\host-windows"
-        
+
         if ($Clean) {
             Write-Host "Cleaning previous build..."
             cargo clean
         }
-        
+
         if ($Test) {
             Write-Host "Running tests..."
             cargo test
             Write-Success "Tests passed"
         }
-        
+
         if ($ReleaseMode) {
             cargo build --release
             $binary = ".\target\release\host-windows.exe"
@@ -212,7 +212,7 @@ function Build-Host {
             cargo build
             $binary = ".\target\debug\host-windows.exe"
         }
-        
+
         if (Test-Path $binary) {
             Write-Success "Host build complete: $binary"
             return $binary
@@ -230,23 +230,23 @@ function Build-Host {
 
 function Build-Android {
     param([bool]$ReleaseMode)
-    
+
     Write-Header "Building Android Client"
-    
+
     try {
         Push-Location "$ScriptPath\android-client"
-        
+
         if ($Clean) {
             Write-Host "Cleaning previous build..."
             .\gradlew clean
         }
-        
+
         if ($Test) {
             Write-Host "Running tests..."
             .\gradlew test
             Write-Success "Tests passed"
         }
-        
+
         if ($ReleaseMode) {
             .\gradlew assembleRelease
             $apk = ".\app\build\outputs\apk\release\app-release.apk"
@@ -254,7 +254,7 @@ function Build-Android {
             .\gradlew assembleDebug
             $apk = ".\app\build\outputs\apk\debug\app-debug.apk"
         }
-        
+
         if (Test-Path $apk) {
             Write-Success "Android build complete: $apk"
             return $apk
@@ -272,7 +272,7 @@ function Build-Android {
 
 function Build-Installer {
     Write-Header "Building InnoSetup Installer"
-    
+
     # Find InnoSetup installation
     $innoDir = @(
         "C:\Program Files (x86)\Inno Setup 6",
@@ -280,32 +280,32 @@ function Build-Installer {
         "C:\Program Files (x86)\Inno Setup 5",
         "C:\Program Files\Inno Setup 5"
     ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-    
+
     if (-not $innoDir) {
         Write-Error-Custom "Inno Setup not found"
         Write-Info "Download from: https://jrsoftware.org/isdl.php"
         return $null
     }
-    
+
     $iscc = Join-Path $innoDir "ISCC.exe"
     $setupScript = Join-Path $ScriptPath "setup.iss"
-    
+
     if (-not (Test-Path $setupScript)) {
         Write-Error-Custom "setup.iss not found"
         return $null
     }
-    
+
     Write-Info "Using Inno Setup: $innoDir"
     Write-Host "Compiling: $setupScript"
-    
+
     try {
         & $iscc $setupScript
-        
+
         if ($LASTEXITCODE -ne 0) {
             throw "ISCC compilation failed"
         }
-        
-        $installer = Join-Path $ScriptPath "dist\TabletMonitor-Setup.exe"
+
+        $installer = Join-Path $ScriptPath "dist\FlexDisplay-Setup.exe"
         if (Test-Path $installer) {
             Write-Success "Installer created: $installer"
             return $installer
@@ -321,24 +321,24 @@ function Build-Installer {
 
 function Deploy-APK {
     param([string]$ApkPath)
-    
+
     Write-Header "Deploying APK"
-    
+
     try {
         # Verify device
         $devices = adb devices | Select-Object -Skip 1 | Where-Object { $_ -match " device" }
-        
+
         if ($null -eq $devices) {
             Write-Error-Custom "No Android devices found"
             return $false
         }
-        
+
         Write-Host "Connected devices:"
         adb devices
-        
+
         Write-Host "Installing $ApkPath..."
         adb install -r $ApkPath
-        
+
         if ($LASTEXITCODE -eq 0) {
             Write-Success "APK installed successfully"
             Write-Host "Launching app..."
@@ -365,7 +365,7 @@ switch ($Target) {
         Download-ADB
         $results.host = Build-Host -ReleaseMode $Release
     }
-    
+
     "android" {
         if (-not $SkipAndroid) {
             $results.android = Build-Android -ReleaseMode $Release
@@ -374,7 +374,7 @@ switch ($Target) {
             }
         }
     }
-    
+
     "installer" {
         Download-FFmpeg
         Download-ADB
@@ -386,20 +386,20 @@ switch ($Target) {
             $results.installer = Build-Installer
         }
     }
-    
+
     "all" {
         Download-FFmpeg
         Download-ADB
-        
+
         if (-not $SkipAndroid) {
             $results.android = Build-Android -ReleaseMode $Release
             if ($Deploy) {
                 Deploy-APK -ApkPath $results.android
             }
         }
-        
+
         $results.host = Build-Host -ReleaseMode $Release
-        
+
         if (-not $SkipSetup) {
             $results.installer = Build-Installer
         }

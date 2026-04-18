@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title Tablet Monitor - Stop
+title FlexDisplay - Stop
 
 set "STOP_SCRIPT=%~dp0stop-usb.ps1"
 

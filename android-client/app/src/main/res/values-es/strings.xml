@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Monitor para Tablet</string>
-    <string name="app_subtitle">Usa tu tablet como segundo monitor para la PC</string>
+    <string name="app_name">FlexDisplay</string>
+    <string name="app_subtitle">Usa tu dispositivo Android como segundo monitor para la PC</string>
 
     <!-- Card de conexión -->
     <string name="section_connection">CONEXIÓN</string>
@@ -46,7 +46,10 @@
     <string name="status_reopened_stream">Estado: reabriendo stream…</string>
     <string name="profile_pending">perfil: pendiente</string>
     <string name="profile_waiting_host_cfg">perfil: esperando config del host</string>
+    <string name="profile_active_format">perfil: %1$s  •  %2$s  •  %3$sfps  •  %4$s kbps</string>
+    <string name="profile_changed_log">Perfil actualizado: %1$s</string>
     <string name="resolution_pending">resolucion pendiente  •  %1$d kbps rx</string>
+    <string name="logo_content_desc">Logo de FlexDisplay</string>
 
     <!-- Log -->
     <string name="log_default">— log —</string>
@@ -55,18 +58,18 @@
     <string name="help_title">Ayuda</string>
     <string name="help_content"><![CDATA[
 <b>Inicio rapido (USB - recomendado)</b><br/>
-1. Conecta la tablet a la PC por cable USB.<br/>
+1. Conecta el dispositivo Android a la PC por cable USB.<br/>
 2. En la PC ejecuta <b>START.bat</b> y elige <b>USB</b>.<br/>
 3. En esta app deja IP en <b>127.0.0.1</b> y toca <b>Conectar</b>.<br/><br/>
 
 <b>Inicio rapido (Wi-Fi)</b><br/>
-1. Conecta PC y tablet a la misma red Wi-Fi.<br/>
+1. Conecta PC y dispositivo Android a la misma red Wi-Fi.<br/>
 2. Ejecuta <b>START.bat</b> y elige <b>Wi-Fi</b>.<br/>
 3. Escribe la IP de tu PC y toca <b>Conectar</b>.<br/><br/>
 
 <b>Modo</b><br/>
 • <b>Espejo</b>: clona el monitor principal.<br/>
-• <b>Extendido</b>: usa la tablet como segundo monitor.<br/><br/>
+• <b>Extendido</b>: usa el dispositivo como segundo monitor.<br/><br/>
 
 <b>Monitor destino</b><br/>
 Dejalo vacio para seleccion automatica.<br/>

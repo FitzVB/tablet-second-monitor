@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TabletMonitor"
+rootProject.name = "FlexDisplay"
 include(":app")

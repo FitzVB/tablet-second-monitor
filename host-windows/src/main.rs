@@ -201,73 +201,111 @@ ConvertTo-Json -Compress"#;
         .collect()
 }
 
+fn logo_png_bytes() -> &'static [u8] {
+    include_bytes!("../../FlexDisplay_Logo.png")
+}
+
 fn host_gui_html() -> &'static str {
     r#"<!doctype html>
 <html lang="es">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tablet Monitor Host</title>
+    <title>FlexDisplay Host Control</title>
     <style>
         :root {
-            --bg1:#0b1220;
-            --bg2:#0f1d3a;
-            --panel:#ffffff;
-            --text:#13203b;
-            --muted:#4c5a78;
-            --accent:#1677ff;
-            --ok:#11845b;
+            --deep-blue:#2A4B8A;
+            --vibrant-orange:#F78C00;
+            --aqua-cyan:#2EC4B6;
+            --panel:#F3F3F3;
+            --text:#3A3A3A;
+            --muted:#647085;
+            --line:#E0E0E0;
+            --ok:#11845B;
+            --warn:#B02A37;
         }
-        body { margin:0; font-family:Segoe UI, Tahoma, sans-serif; color:var(--text);
-            background:radial-gradient(1000px 450px at 0% 0%, #1a3b78 0%, transparent 60%),
-                                 radial-gradient(900px 450px at 100% 100%, #15305f 0%, transparent 60%),
-                                 linear-gradient(135deg, var(--bg1), var(--bg2));
+        body { margin:0; font-family:Roboto, "Segoe UI", Tahoma, sans-serif; color:var(--text);
+            background:
+                radial-gradient(980px 420px at 8% 0%, rgba(42,75,138,.35) 0%, transparent 62%),
+                radial-gradient(820px 360px at 80% 0%, rgba(247,140,0,.18) 0%, transparent 64%),
+                radial-gradient(920px 420px at 95% 100%, rgba(46,196,182,.25) 0%, transparent 60%),
+                linear-gradient(145deg, #f8fafc, #eef2f7);
             min-height:100vh; display:flex; align-items:center; justify-content:center; }
-        .card { width:min(760px, 94vw); background:var(--panel); border-radius:16px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,.35); }
-        h1 { margin:0 0 8px; font-size:26px; }
-        .sub { color:var(--muted); margin-bottom:18px; }
+        .card { width:min(820px, 95vw); background:var(--panel); border-radius:22px; padding:24px;
+            border:1px solid #fff;
+            border-top:4px solid var(--aqua-cyan);
+            box-shadow:0 26px 70px rgba(37,58,96,.16); }
+        .brand { display:flex; align-items:center; gap:14px; margin-bottom:12px; }
+        .brand img { width:56px; height:56px; border-radius:14px; box-shadow:0 8px 18px rgba(42,75,138,.25); }
+        h1 { margin:0 0 3px; font-size:28px; color:#223252; }
+        .sub { color:var(--muted); margin:0 0 18px; }
         .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
         .row { display:flex; flex-direction:column; gap:6px; }
-        label { font-size:13px; color:var(--muted); }
-        select, button { border-radius:10px; border:1px solid #ccd3e4; padding:10px; font-size:14px; }
-        button { background:var(--accent); color:#fff; border:none; font-weight:600; cursor:pointer; }
-        button:hover { filter:brightness(1.05); }
+        label { font-size:13px; color:#52627e; font-weight:600; }
+        select, button { border-radius:12px; border:1px solid #c8d1df; padding:10px 11px; font-size:14px; }
+        select {
+            background:linear-gradient(180deg, #ffffff, #f7fbff);
+            border-color:#bcd0ec;
+            color:#25344f;
+        }
+        select:focus { outline:2px solid rgba(46,196,182,.35); border-color:var(--aqua-cyan); }
+        .preset-meta {
+            margin-top:10px;
+            border-radius:12px;
+            border:1px solid #dbe4f2;
+            background:linear-gradient(145deg, #ffffff, #eef5ff);
+            padding:10px 12px;
+            font-size:13px;
+            color:#314665;
+        }
+        button { color:#fff; border:none; font-weight:700; cursor:pointer; letter-spacing:.2px; }
+        #save { background:linear-gradient(145deg, var(--vibrant-orange), #e57400); }
+        #refresh { background:linear-gradient(145deg, var(--aqua-cyan), #1ea69a); }
+        button:hover { filter:brightness(1.05); transform:translateY(-1px); }
         .status { margin-top:14px; min-height:20px; font-weight:600; opacity:0; transition:opacity .2s ease; }
         .status.visible { opacity:1; }
         .status.busy { color:var(--muted); }
         .status.ok { color:var(--ok); }
-        .status.error { color:#b02a37; }
+        .status.error { color:var(--warn); }
         .hint { margin-top:10px; font-size:13px; color:var(--muted); }
+        .actions { margin-top:14px; display:flex; gap:8px; }
         @media (max-width: 720px) { .grid { grid-template-columns:1fr; } }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>Tablet Monitor Host</h1>
-        <div class="sub">Encoder, GPU and stream quality profile.</div>
+        <div class="brand">
+            <img src="/brand/logo.png" alt="FlexDisplay logo" />
+            <div>
+                <h1>FlexDisplay Host</h1>
+                <div class="sub">Control encoder, GPU and quality profile with immediate apply.</div>
+            </div>
+        </div>
         <div class="grid">
             <div class="row">
                 <label for="encoder">Preferred encoder</label>
                 <select id="encoder"></select>
             </div>
             <div class="row">
-                <label for="gpu">Preferred AMF GPU</label>
+                <label for="gpu">Preferred GPU adapter (optional)</label>
                 <select id="gpu"></select>
             </div>
             <div class="row" style="grid-column:span 2;">
                 <label for="preset">Quality profile</label>
                 <select id="preset"></select>
+                <div id="presetMeta" class="preset-meta"></div>
             </div>
         </div>
-        <div style="margin-top:14px; display:flex; gap:8px;">
+        <div class="actions">
             <button id="save">Save and apply</button>
-            <button id="refresh" style="background:#384865;">Reload detection</button>
+            <button id="refresh">Reload detection</button>
         </div>
         <div id="status" class="status"></div>
-        <div class="hint">Save and apply persists the selected profile. Reload detection refreshes host GPUs and encoders, but does not save pending changes.</div>
+        <div class="hint">Save and apply persists the selected profile and restarts active stream safely. Preferred GPU adapter is only used when a hardware encoder path needs explicit device selection. Reload detection refreshes available encoders/GPUs.</div>
     </div>
 <script>
 let statusTimer = null;
+let presetDefs = [];
 
 function setStatus(message, kind = 'ok', autoClearMs = 0){
     const el = document.getElementById('status');
@@ -311,17 +349,26 @@ async function loadAll(){
 
     const preset = document.getElementById('preset');
     preset.innerHTML = '';
-    const presetDefs = [
-        { value: '',           label: 'auto (from client)' },
-        { value: 'ahorro',     label: 'Power saver \u2014 960\u00d7544 \u00b7 30fps \u00b7 5 Mbps' },
-        { value: 'equilibrado',label: 'Balanced \u2014 1280\u00d7720 \u00b7 60fps \u00b7 10 Mbps' },
-        { value: 'alta_720p',  label: 'High quality 720p \u2014 1280\u00d7720 \u00b7 60fps \u00b7 15 Mbps' },
-        { value: 'fluido_900p',label: 'Smooth 900p \u2014 1600\u00d7900 \u00b7 60fps \u00b7 20 Mbps' },
-        { value: 'full_hd',    label: 'Full HD office \u2014 1920\u00d71080 \u00b7 60fps \u00b7 25 Mbps' },
-        { value: 'full_hd_max',label: 'Full HD detail \u2014 1920\u00d71080 \u00b7 60fps \u00b7 35 Mbps' },
+    presetDefs = [
+        { value: '',           label: 'Auto (from client)', detail: 'Host follows device stream request. Best for quick testing.' },
+        { value: 'ahorro',     label: 'Power saver - 960x544 / 30fps / 5 Mbps', detail: 'Low bandwidth and battery impact for remote control tasks.' },
+        { value: 'equilibrado',label: 'Balanced - 1280x720 / 60fps / 10 Mbps', detail: 'Default smooth profile for most Android devices.' },
+        { value: 'alta_720p',  label: 'High quality 720p - 1280x720 / 60fps / 15 Mbps', detail: 'Sharper image while preserving 60fps responsiveness.' },
+        { value: 'fluido_900p',label: 'Smooth 900p - 1600x900 / 60fps / 20 Mbps', detail: 'Higher detail profile for stronger GPUs and USB links.' },
+        { value: 'full_hd',    label: 'Full HD office - 1920x1080 / 60fps / 25 Mbps', detail: '1080p profile optimized for productivity and text clarity.' },
+        { value: 'full_hd_max',label: 'Full HD detail - 1920x1080 / 60fps / 35 Mbps', detail: 'Maximum detail profile. Requires stable encoder and fast link.' },
     ];
     presetDefs.forEach(p => { const o=document.createElement('option'); o.value=p.value; o.textContent=p.label; preset.appendChild(o); });
     preset.value = set.preferred_preset || '';
+    renderPresetMeta();
+}
+
+function renderPresetMeta(){
+    const preset = document.getElementById('preset');
+    const meta = document.getElementById('presetMeta');
+    const selected = presetDefs.find(p => p.value === preset.value) || presetDefs[0];
+    if (!meta || !selected) return;
+    meta.textContent = selected.detail;
 }
 
 async function save(){
@@ -361,6 +408,7 @@ async function save(){
 
 document.getElementById('save').addEventListener('click', save);
 document.getElementById('refresh').addEventListener('click', loadAll);
+document.getElementById('preset').addEventListener('change', renderPresetMeta);
 loadAll();
 </script>
 </body>
@@ -496,6 +544,16 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::get())
         .map(|| warp::reply::html(host_gui_html()));
 
+    let logo_route = warp::path!("brand" / "logo.png")
+        .and(warp::get())
+        .map(|| {
+            warp::http::Response::builder()
+                .header("content-type", "image/png")
+                .header("cache-control", "public, max-age=3600")
+                .body(logo_png_bytes().to_vec())
+                .expect("build png response")
+        });
+
     let capabilities_route = warp::path!("api" / "capabilities")
         .and(warp::get())
         .map(|| {
@@ -617,6 +675,7 @@ async fn main() -> anyhow::Result<()> {
         == Some("1");
 
     let routes = ui_route
+        .or(logo_route)
         .or(health)
         .or(capabilities_route)
         .or(displays_route)

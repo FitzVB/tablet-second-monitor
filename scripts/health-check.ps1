@@ -1,4 +1,4 @@
-# health-check.ps1 - System health check for Tablet Monitor
+# health-check.ps1 - System health check for FlexDisplay
 # Verifies all dependencies and configurations are in order
 # Usage: .\health-check.ps1 [-Full] [-Fix]
 
@@ -12,13 +12,13 @@ $ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $HealthStatus = @{ OK = 0; WARNING = 0; ERROR = 0 }
 
 Write-Host "==============================" -ForegroundColor Cyan
-Write-Host "Tablet Monitor - Health Check" -ForegroundColor Cyan
+Write-Host "FlexDisplay - Health Check" -ForegroundColor Cyan
 Write-Host "==============================`n" -ForegroundColor Cyan
 
 # Helper functions
 function Check-Tool {
     param([string]$Name, [string]$Command)
-    
+
     try {
         $null = & $Command --version 2>&1
         Write-Host "✓ $Name" -ForegroundColor Green
@@ -33,7 +33,7 @@ function Check-Tool {
 
 function Check-Path {
     param([string]$Name, [string]$Path)
-    
+
     if (Test-Path $Path) {
         Write-Host "✓ $Name" -ForegroundColor Green
         $HealthStatus.OK++
@@ -47,7 +47,7 @@ function Check-Path {
 
 function Check-Port {
     param([int]$Port, [string]$Description)
-    
+
     try {
         $tcpClient = New-Object System.Net.Sockets.TcpClient
         $tcpClient.Connect("127.0.0.1", $Port)
@@ -62,7 +62,7 @@ function Check-Port {
 
 function Check-ADBDevices {
     $devices = adb devices 2>&1 | Select-Object -Skip 1 | Where-Object { $_ -match " device" }
-    
+
     if ($devices) {
         Write-Host "✓ Android devices connected: $($devices.Count)" -ForegroundColor Green
         $HealthStatus.OK++
@@ -96,14 +96,14 @@ function Check-ABDReverse {
 function Check-FFmpegEncoders {
     $encoders = @("h264_nvenc", "h264_qsv", "h264_amf", "libx264")
     $available = @()
-    
+
     foreach ($encoder in $encoders) {
         $check = ffmpeg -codecs 2>&1 | Select-String $encoder
         if ($check) {
             $available += $encoder
         }
     }
-    
+
     if ($available.Count -gt 0) {
         Write-Host "✓ Available H.264 encoders: $($available -join ', ')" -ForegroundColor Green
         $HealthStatus.OK++
@@ -117,7 +117,7 @@ function Check-FFmpegEncoders {
 
 function Fix-Issues {
     Write-Host "`nAttempting to fix issues..." -ForegroundColor Yellow
-    
+
     # Reestablish ADB reverse if needed
     $reverse = adb reverse -l 2>&1 | Select-String "9001"
     if (-not $reverse) {
@@ -125,7 +125,7 @@ function Fix-Issues {
         adb reverse tcp:9001 tcp:9001
         Write-Host "✓ ADB reverse re-established" -ForegroundColor Green
     }
-    
+
     # Reconnect devices
     Write-Host "Reconnecting devices..."
     adb disconnect
@@ -154,7 +154,7 @@ Check-Path "Build script" "$ScriptPath\build.ps1"
 # USB Configuration
 Write-Host "`nUSB & Device Configuration`n" -ForegroundColor Cyan
 
-Check-Port 9001 "Tablet Monitor"
+Check-Port 9001 "FlexDisplay"
 Check-ADBDevices
 Check-ABDReverse
 
@@ -166,19 +166,19 @@ Check-FFmpegEncoders
 # Detailed diagnostics (if -Full)
 if ($Full) {
     Write-Host "`nDetailed Diagnostics`n" -ForegroundColor Cyan
-    
+
     Write-Host "Rust version details:"
     rustc --version --verbose
-    
+
     Write-Host "`nJava version details:"
     java -version
-    
+
     Write-Host "`nFFmpeg version details:"
     ffmpeg -version | Select-Object -First 5
-    
+
     Write-Host "`nGit configuration:"
     git config --list | Select-Object -First 10
-    
+
     Write-Host "`nAndroid devices detailed:"
     adb devices -l
 }

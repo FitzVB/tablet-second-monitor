@@ -1,7 +1,7 @@
 {
   "project": {
-    "name": "Tablet Second Monitor",
-    "description": "USB-based tablet-to-PC streaming with H.264 hardware codec",
+    "name": "FlexDisplay",
+    "description": "USB-based device-to-PC streaming with H.264 hardware codec",
     "version": "1.0.0",
     "minPythonVersion": false,
     "nodeVersion": null
@@ -218,7 +218,7 @@
       {
         "step": 4,
         "action": "Authorize Device",
-        "instructions": "Tablet may show prompt: tap 'Allow USB debugging'"
+        "instructions": "Device may show prompt: tap 'Allow USB debugging'"
       }
     ]
   },

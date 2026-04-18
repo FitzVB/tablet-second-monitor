@@ -27,6 +27,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
+import android.widget.ArrayAdapter
 import android.widget.Switch
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
@@ -176,6 +177,7 @@ class MainActivity : AppCompatActivity() {
         serverIpInput = findViewById(R.id.serverIpInput)
         displayInput = findViewById(R.id.displayInput)
         modeSpinner = findViewById(R.id.modeSpinner)
+        setupModeSpinner()
         connectButton = findViewById(R.id.connectButton)
         helpButton = findViewById(R.id.helpButton)
         languageButton = findViewById(R.id.languageButton)
@@ -370,11 +372,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (text.startsWith("CFG:")) {
-                    val newProfile = "host profile: " + text.removePrefix("CFG:")
+                    val newProfile = formatHostProfile(text.removePrefix("CFG:"))
                     val changed = newProfile != activeStreamProfile
                     activeStreamProfile = newProfile
                     if (changed) {
-                        runOnUiThread { appendLog(activeStreamProfile) }
+                        runOnUiThread { appendLog(getString(R.string.profile_changed_log, activeStreamProfile)) }
                     }
                     return
                 }
@@ -703,6 +705,46 @@ class MainActivity : AppCompatActivity() {
     private fun normalizedDisplayMode(): String {
         val raw = modeSpinner.selectedItem?.toString()?.trim()?.lowercase() ?: "mirror"
         return if (raw == "extended" || raw == "extendido") "extended" else "mirror"
+    }
+
+    private fun setupModeSpinner() {
+        val adapter = ArrayAdapter.createFromResource(
+            this,
+            R.array.display_modes,
+            R.layout.spinner_item_white
+        )
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item_white)
+        modeSpinner.adapter = adapter
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            modeSpinner.setPopupBackgroundResource(R.drawable.spinner_popup_bg)
+        }
+    }
+
+    private fun formatHostProfile(cfg: String): String {
+        val map = mutableMapOf<String, String>()
+        cfg.split(';').forEach { part ->
+            val trimmed = part.trim()
+            val eq = trimmed.indexOf('=')
+            if (eq > 0 && eq < trimmed.length - 1) {
+                val key = trimmed.substring(0, eq).trim().lowercase()
+                val value = trimmed.substring(eq + 1).trim()
+                map[key] = value
+            }
+        }
+
+        val encoderRaw = map["encoder"] ?: "auto"
+        val encoderLabel = when (encoderRaw) {
+            "h264_amf" -> "AMF H.264"
+            "h264_nvenc" -> "NVENC H.264"
+            "h264_qsv" -> "QSV H.264"
+            "libx264" -> "x264"
+            else -> encoderRaw
+        }
+        val resolution = "${map["w"] ?: "?"}x${map["h"] ?: "?"}"
+        val fps = map["fps"] ?: "?"
+        val bitrate = map["bitrate_kbps"] ?: "?"
+
+        return getString(R.string.profile_active_format, encoderLabel, resolution, fps, bitrate)
     }
 
     /**
@@ -1218,7 +1260,7 @@ private class H264Decoder(
         val info = MediaCodec.BufferInfo()
         // Block up to 4ms waiting for the next decoded frame — avoids CPU spinning.
         // When the HW decoder has output ready it returns immediately; if nothing is
-        // ready within 4ms we loop back and block again. Then drain any further 
+        // ready within 4ms we loop back and block again. Then drain any further
         // already-decoded frames non-blocking so bursts are fully consumed in one pass.
         var timeout = 2000L // µs — first call blocks
         while (true) {

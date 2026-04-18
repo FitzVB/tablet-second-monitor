@@ -4,7 +4,7 @@ This document is the source of truth for understanding, running, debugging, and 
 
 ## 1. Goal
 
-Tablet Monitor turns an Android tablet into:
+FlexDisplay turns an Android device into:
 - Mirror mode: a low-latency mirror of a Windows monitor.
 - Extended mode: a second display with touch input support.
 
@@ -170,7 +170,7 @@ A session is considered healthy when:
 - host logs show mirror geometry in physical pixels (for example `1920x1080`),
 - host logs show active stream profile and first H.264 bytes sent,
 - Android logs show repeated `VideoTransform` entries with valid picture dimensions,
-- tablet displays full desktop content (taskbar visible in mirror when expected),
+- device displays full desktop content (taskbar visible in mirror when expected),
 - profile changes in host GUI trigger reconnect and apply new profile.
 
 ## 12. Rebuild from zero (disaster recovery)

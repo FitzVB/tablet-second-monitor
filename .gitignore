@@ -33,3 +33,12 @@ dist/
 # Local debug captures (manual QA artifacts)
 tm_*.png
 tm_ui*.xml
+
+# Local identity (do not commit)
+identity.local.md
+graphic_identity.md
+FlexDisplay_Logo.png
+android-client/app/src/main/res/drawable/flexdisplay_logo.png
+
+# Local packaged APK (manual/internal distribution)
+FlexDisplay.apk

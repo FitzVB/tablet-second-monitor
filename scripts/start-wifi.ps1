@@ -1,12 +1,31 @@
-# Tablet Monitor - Wi-Fi Mode Startup
+# FlexDisplay - Wi-Fi Mode Startup
 
 Write-Host ""
-Write-Host "Tablet Monitor - Wi-Fi Mode Startup" -ForegroundColor Cyan
+Write-Host "FlexDisplay - Wi-Fi Mode Startup" -ForegroundColor Cyan
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Reset PATH to machine+user defaults (cargo/rustup expected there)
-$env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
+$runtimeEnv = Join-Path $PSScriptRoot "runtime-env.ps1"
+if (Test-Path $runtimeEnv) {
+    . $runtimeEnv -RootPath (Split-Path -Parent $PSScriptRoot)
+}
+
+function Resolve-HostExePath {
+    param([string]$Root)
+
+    $candidates = @(
+        (Join-Path $Root "host-windows\target\release\host-windows.exe"),
+        (Join-Path $Root "host-windows.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
 
 # IMPORTANT: do not force localhost in Wi-Fi mode
 Remove-Item Env:TABLET_MONITOR_LISTEN -ErrorAction SilentlyContinue
@@ -48,11 +67,24 @@ foreach ($ownerPid in $portOwners) {
 }
 
 $root = Split-Path -Parent $PSScriptRoot
-Set-Location "$root\host-windows"
 $env:TABLET_MONITOR_FPS = '60'
 
-if (Test-Path ".\target\release\host-windows.exe") {
-    .\target\release\host-windows.exe
-} else {
-    cargo run --release
+$hostExe = Resolve-HostExePath -Root $root
+if ($hostExe) {
+    $hostDir = Split-Path -Parent $hostExe
+    Set-Location $hostDir
+    & $hostExe
+    exit $LASTEXITCODE
 }
+
+if (Test-Path (Join-Path $root "host-windows\Cargo.toml")) {
+    Set-Location (Join-Path $root "host-windows")
+    cargo run --release
+    exit $LASTEXITCODE
+}
+
+Write-Host "[ERROR] Host executable not found." -ForegroundColor Red
+Write-Host "        Expected one of:" -ForegroundColor Red
+Write-Host "        - host-windows\target\release\host-windows.exe" -ForegroundColor DarkRed
+Write-Host "        - host-windows.exe" -ForegroundColor DarkRed
+exit 1

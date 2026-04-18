@@ -1,4 +1,4 @@
-# Setup Guide - Tablet Second Monitor
+# Setup Guide - FlexDisplay
 
 Complete installation and configuration guide for this project.
 
@@ -21,7 +21,7 @@ For daily use, avoid running the host manually unless you are debugging.
 - **RAM**: 4GB minimum (8GB recommended)
 - **Network**: USB cable for device connection
 
-### Android Tablet
+### Android Device
 - **Version**: Android 7.0+ (API level 24+)
 - **Features**: USB debugging capability
 - **Connection**: USB Type-C or Micro-USB data cable
@@ -70,7 +70,7 @@ cargo 1.78.0 (54d8815b0 2024-04-26)
 
 **Status**: [Required for ADB]
 
-**Why**: ADB (Android Debug Bridge) enables USB tunneling to tablet
+**Why**: ADB (Android Debug Bridge) enables USB tunneling to Android device
 
 **Installation**:
 
@@ -260,6 +260,7 @@ Notes:
 - `extended` only becomes a true external monitor when Windows has a non-primary display to extend onto.
 - For a software-only monitor, that means installing a signed indirect display driver.
 - After installation, the host exposes `http://127.0.0.1:9001/displays` so you can inspect detected display indexes.
+- If you need more than one virtual monitor, edit `C:\VirtualDisplayDriver\vdd_settings.xml` and set `<monitors><count>N</count></monitors>` (for example `2`, `3`, or `4`), then reload the driver or reboot.
 
 ---
 
@@ -287,7 +288,7 @@ cd android-client
 
 ## Device Setup
 
-### Enable USB Debugging on Android Tablet
+### Enable USB Debugging on Android Device
 
 1. **Developer Options**:
    - Settings → About → Tap "Build Number" 7 times
@@ -297,8 +298,8 @@ cd android-client
    - Settings → Developer Options → USB Debugging → ON
 
 3. **Connect Cable**:
-   - Plug USB data cable into tablet and Windows PC
-   - Tablet may show "Allow USB debugging?" → Tap "Allow"
+  - Plug USB data cable into Android device and Windows PC
+  - Device may show "Allow USB debugging?" -> Tap "Allow"
 
 ### Verify ADB Connection
 
@@ -328,7 +329,7 @@ cd android-client
 .\gradlew assembleDebug
 ```
 
-### 2. Install APK on Tablet
+### 2. Install APK on Device
 
 ```powershell
 adb install -r android-client\app\build\outputs\apk\debug\app-debug.apk
@@ -348,15 +349,15 @@ $env:TABLET_MONITOR_LISTEN = "127.0.0.1"
 cargo run
 ```
 
-### 5. Launch App on Tablet
+### 5. Launch App on Device
 
 ```powershell
 adb shell am start -n com.example.tabletmonitor/.MainActivity
 ```
 
-### 6. Connect on Tablet UI
+### 6. Connect on Device UI
 
-- Tap "Connect" in the tablet app
+- Tap "Connect" in the device app
 - Video stream should appear on SurfaceView
 - View connection logs in app UI
 

@@ -5,10 +5,12 @@
 
     <application
         android:allowBackup="true"
-        android:label="Tablet Monitor"
+        android:icon="@drawable/flexdisplay_logo"
+        android:roundIcon="@drawable/flexdisplay_logo"
+        android:label="@string/app_name"
         android:usesCleartextTraffic="true"
         android:supportsRtl="true"
-        android:theme="@style/Theme.TabletMonitor">
+        android:theme="@style/Theme.FlexDisplay">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"

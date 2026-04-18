@@ -1,4 +1,4 @@
-# Contributing to Tablet Second Monitor
+# Contributing to FlexDisplay
 
 Thanks for your interest in contributing. This document explains how.
 
