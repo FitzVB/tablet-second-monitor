@@ -9,7 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 - **Invisible Android UI**: The transparent theme background (`windowBackground=transparent`) made text fields and labels invisible on black backgrounds. Explicit dark backgrounds were added in `activity_main.xml` (`#121212` on root layout, `#1E1E1E` on top panel) and white/gray text colors were applied to controls.
-- **Black screen on Wi-Fi connect**: The server listened only on `127.0.0.1`, rejecting incoming Wi-Fi clients. Changed default to `0.0.0.0` (configurable with `TABLET_MONITOR_LISTEN`). USB still works through ADB reverse tunnel.
+- **Black screen on Wi-Fi connect**: The server listened only on `127.0.0.1`, rejecting incoming Wi-Fi clients. Changed default to `0.0.0.0` (configurable with `FLEXDISPLAY_LISTEN`). USB still works through ADB reverse tunnel.
 
 ### Changed
 

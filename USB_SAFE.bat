@@ -20,7 +20,7 @@ echo [INFO] Using ADB: %ADB%
 "%ADB%" devices
 "%ADB%" reverse --remove-all
 "%ADB%" reverse tcp:9001 tcp:9001
-"%ADB%" shell monkey -p com.example.tabletmonitor -c android.intent.category.LAUNCHER 1
+"%ADB%" shell monkey -p com.flexdisplay.android -c android.intent.category.LAUNCHER 1
 echo [OK] USB reverse configured. Now run START_SAFE.bat in USB mode.
 pause
 exit /b 0

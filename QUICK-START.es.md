@@ -27,11 +27,11 @@
 
 ## Paso 2 — Instala la app en el Android
 
-1. En tu tablet, ve a **Ajustes → Seguridad** (o *Aplicaciones*) y activa **"Fuentes desconocidas"** (o **"Instalar apps desconocidas"**).
+1. En tu dispositivo Android, ve a **Ajustes → Seguridad** (o *Aplicaciones*) y activa **"Fuentes desconocidas"** (o **"Instalar apps desconocidas"**).
    *(Solo necesitas hacer esto una vez.)*
 2. Conecta el dispositivo al PC por USB.
-3. Copia el archivo `FlexDisplay.apk` (está dentro del ZIP que extrajiste) a la tablet.
-4. Abre el archivo `.apk` desde la tablet y confirma la instalación.
+3. Copia el archivo `FlexDisplay.apk` (está dentro del ZIP que extrajiste) a el dispositivo Android.
+4. Abre el archivo `.apk` desde el dispositivo Android y confirma la instalación.
 
 ---
 
@@ -40,7 +40,7 @@
 > Si solo quieres **duplicar** tu pantalla, puedes saltar este paso.
 
 El **Virtual Display Driver (VDD)** es un programa gratuito que crea una pantalla virtual en Windows.
-Esto permite que tu tablet funcione como un **monitor extra** (pantalla extendida).
+Esto permite que tu dispositivo Android funcione como un **monitor extra** (pantalla extendida).
 
 ### Cómo instalarlo
 
@@ -70,35 +70,35 @@ Después de reiniciar, ve a **Configuración → Sistema → Pantalla** y deber�
 
 ---
 
-## Paso 5 — Conecta la tablet
+## Paso 5 — Conecta el dispositivo Android
 
 ### Modo USB
 
-1. Conecta la tablet al PC con el cable USB.
-2. En la tablet, aparecerá una ventana que dice **"¿Permitir depuración USB?"** → toca **Aceptar**.
+1. Conecta el dispositivo Android al PC con el cable USB.
+2. En el dispositivo Android, aparecerá una ventana que dice **"¿Permitir depuración USB?"** → toca **Aceptar**.
 3. El programa configura todo automáticamente.
-4. Abre la app **FlexDisplay** en la tablet.
+4. Abre la app **FlexDisplay** en el dispositivo Android.
 5. La pantalla debería aparecer de inmediato. Si no aparece, toca el botón **Conectar**.
 
 ### Modo Wi-Fi
 
-1. Asegúrate de que el PC y la tablet están en la **misma red Wi-Fi**.
+1. Asegúrate de que el PC y el dispositivo Android están en la **misma red Wi-Fi**.
 2. Cuando inicies `START.bat` verás un mensaje como:
    `[OK] Wi-Fi host IP detected: 192.168.1.50`
    Ese número es la IP de tu PC.
-3. Abre la app **FlexDisplay** en la tablet.
+3. Abre la app **FlexDisplay** en el dispositivo Android.
 4. Escribe esa IP en el campo de dirección y toca **Conectar**.
 
 ---
 
 ## Paso 6 — Elige el modo de pantalla
 
-Dentro de la app FlexDisplay en la tablet, verás dos opciones:
+Dentro de la app FlexDisplay en el dispositivo Android, verás dos opciones:
 
 | Modo | ¿Cuándo usarlo? |
 |---|---|
-| **Mirror** (duplicar) | Ver la misma imagen que tu PC en la tablet |
-| **Extended** (extendida) | Usar la tablet como segundo monitor independiente |
+| **Mirror** (duplicar) | Ver la misma imagen que tu PC en el dispositivo Android |
+| **Extended** (extendida) | Usar el dispositivo Android como segundo monitor independiente |
 
 Para el modo **Extended** necesitas tener instalado el VDD (Paso 3).
 
@@ -115,10 +115,10 @@ También puedes hacer doble clic en **`scripts\STOP.bat`** para detenerlo sin ce
 
 ## Problemas comunes
 
-### La tablet no aparece en el PC (modo USB)
+### el dispositivo Android no aparece en el PC (modo USB)
 - Asegúrate de que el cable USB transfiere datos (no solo carga).
-- Ve a **Ajustes → Opciones de desarrollador** en la tablet y activa **Depuración USB**.
-- Acepta el mensaje de autorización en la pantalla de la tablet.
+- Ve a **Ajustes → Opciones de desarrollador** en el dispositivo Android y activa **Depuración USB**.
+- Acepta el mensaje de autorización en la pantalla de el dispositivo Android.
 
 ### La app muestra "No se puede conectar" (modo Wi-Fi)
 - Verifica que PC y tablet están en la **misma red Wi-Fi**.
@@ -141,5 +141,5 @@ Usa **`START_SAFE.bat`** en lugar de `START.bat`. Este modo evita los scripts de
 ## Desinstalar
 
 1. Borra la carpeta donde extrajiste FlexDisplay.
-2. Desinstala la app FlexDisplay desde la tablet (**Ajustes → Aplicaciones**).
+2. Desinstala la app FlexDisplay desde el dispositivo Android (**Ajustes → Aplicaciones**).
 3. Si instalaste el VDD y ya no lo necesitas, ábrelo desde el menú de inicio o desde **Panel de control → Programas** y desinstálalo.

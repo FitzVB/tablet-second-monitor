@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.tabletmonitor"
+    namespace = "com.flexdisplay.android"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.tabletmonitor"
+        applicationId = "com.flexdisplay.android"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

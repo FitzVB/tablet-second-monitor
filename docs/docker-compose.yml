@@ -12,10 +12,10 @@ services:
     depends_on:
       - adb-proxy  # If using ADB in container (advanced setup)
     environment:
-      TABLET_MONITOR_LISTEN: "0.0.0.0"
-      TABLET_MONITOR_FPS: "60"
-      TABLET_MONITOR_BITRATE: "3500"
-      TABLET_MONITOR_HW_ENCODER: "libx264"  # Use software fallback in container
+      FLEXDISPLAY_LISTEN: "0.0.0.0"
+      FLEXDISPLAY_FPS: "60"
+      FLEXDISPLAY_BITRATE: "3500"
+      FLEXDISPLAY_HW_ENCODER: "libx264"  # Use software fallback in container
     volumes:
       - /dev/shm:/dev/shm  # For screen capture
     devices:

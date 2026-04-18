@@ -224,7 +224,7 @@ cargo build
 
 **Run Debug**:
 ```powershell
-$env:TABLET_MONITOR_LISTEN = "127.0.0.1"
+$env:FLEXDISPLAY_LISTEN = "127.0.0.1"
 cargo run
 ```
 
@@ -236,12 +236,12 @@ cargo build --release
 
 **Environment Variables** (optional):
 ```powershell
-$env:TABLET_MONITOR_HW_ENCODER = "h264_nvenc"  # GPU encoder: h264_nvenc, h264_qsv, h264_amf, libx264
-$env:TABLET_MONITOR_LISTEN = "127.0.0.1"      # Listen address
-$env:TABLET_MONITOR_FPS = "60"                 # Target FPS
-$env:TABLET_MONITOR_BITRATE = "3500"           # Bitrate in kbps
-$env:TABLET_MONITOR_MODE = "mirror"            # mirror | extended
-$env:TABLET_MONITOR_EXTENDED_DISPLAY = "1"     # Optional display index override
+$env:FLEXDISPLAY_HW_ENCODER = "h264_nvenc"  # GPU encoder: h264_nvenc, h264_qsv, h264_amf, libx264
+$env:FLEXDISPLAY_LISTEN = "127.0.0.1"      # Listen address
+$env:FLEXDISPLAY_FPS = "60"                 # Target FPS
+$env:FLEXDISPLAY_BITRATE = "3500"           # Bitrate in kbps
+$env:FLEXDISPLAY_MODE = "mirror"            # mirror | extended
+$env:FLEXDISPLAY_EXTENDED_DISPLAY = "1"     # Optional display index override
 ```
 
 **Virtual Display Driver**:
@@ -345,14 +345,14 @@ adb reverse tcp:9001 tcp:9001
 
 ```powershell
 cd host-windows
-$env:TABLET_MONITOR_LISTEN = "127.0.0.1"
+$env:FLEXDISPLAY_LISTEN = "127.0.0.1"
 cargo run
 ```
 
 ### 5. Launch App on Device
 
 ```powershell
-adb shell am start -n com.example.tabletmonitor/.MainActivity
+adb shell am start -n com.flexdisplay.android/.MainActivity
 ```
 
 ### 6. Connect on Device UI
@@ -403,7 +403,7 @@ For CI/CD or rapid setup, use automation-ready commands:
     "adb_reverse": "adb reverse tcp:9001 tcp:9001",
     "install_apk": "adb install -r android-client\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
     "start_host": "cd host-windows && cargo run",
-    "start_app": "adb shell am start -n com.example.tabletmonitor/.MainActivity"
+    "start_app": "adb shell am start -n com.flexdisplay.android/.MainActivity"
   }
 }
 ```
@@ -488,13 +488,13 @@ cargo run
 
 # Terminal 2: Monitor device logs
 $env:Path += ";$env:LOCALAPPDATA\Android\Sdk\platform-tools"
-adb logcat -s "TabletMonitor"
+adb logcat -s "FlexDisplay"
 
 # Terminal 3: Rebuild/redeploy on change
 cd android-client
 .\gradlew assembleDebug
 adb install -r app\build\outputs\apk\debug\app-debug.apk
-adb shell am start -n com.example.tabletmonitor/.MainActivity
+adb shell am start -n com.flexdisplay.android/.MainActivity
 ```
 
 ### Git Workflow

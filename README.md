@@ -38,7 +38,7 @@ Turn an Android device into a touch-enabled second monitor for Windows over USB 
 | Screen | Any resolution — host scales output automatically |
 | RAM | 1 GB free | 2 GB+ |
 
-> **Tested tablets:** Samsung Galaxy Tab S series, Lenovo Tab P series, Fire HD 10 (with Play Store). Any Android 7+ tablet with a hardware H.264 decoder will work.
+> **Tested devices:** Samsung Galaxy Tab S series, Lenovo Tab P series, Fire HD 10 (with Play Store). Any Android 7+ device with a hardware H.264 decoder will work.
 
 ---
 
@@ -192,7 +192,7 @@ Notes:
 - The launcher tries to show the PC LAN IP.
 - In the app, use that IP and port `9001`.
 
-## Multiple Tablets and Virtual Displays
+## Multiple Android Devices and Virtual Displays
 
 Use this when you want 2, 3, or 4 Android devices as different monitors.
 
@@ -200,7 +200,7 @@ Use this when you want 2, 3, or 4 Android devices as different monitors.
 
 - Mirror mode duplicates a monitor.
 - Extended mode needs extra displays in Windows (physical or virtual).
-- Wi-Fi mode does not require ADB between tablets.
+- Wi-Fi mode does not require ADB between Android devices.
 
 ### Step 1. Install virtual display support (one-time)
 
@@ -280,7 +280,7 @@ Use one of these options:
 ### Troubleshooting for non-technical users
 
 1. If Extended looks identical to Primary, Windows is not in Extend mode yet.
-2. If two tablets show the same extended screen, assign different Target monitor numbers.
+2. If two Android devices show the same extended screen, assign different Target monitor numbers.
 3. If a device cannot connect in Wi-Fi mode, verify both devices are on the same network and the app uses the PC LAN IP.
 4. If you cannot find a VDD app in Start menu, edit `C:\VirtualDisplayDriver\vdd_settings.xml` and change `<count>` as shown above, then reload the driver.
 

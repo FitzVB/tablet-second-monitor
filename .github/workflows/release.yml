@@ -118,7 +118,7 @@ jobs:
         shell: pwsh
         run: |
           $version   = "${{ github.ref_name }}" -replace "^v",""
-          $distName  = "TabletMonitor-v$version-windows"
+          $distName  = "FlexDisplay-v$version-windows"
           $distDir   = "dist\$distName"
 
           New-Item -ItemType Directory -Force $distDir | Out-Null
@@ -137,7 +137,7 @@ jobs:
           # APK
           $apkPath = "${{ steps.find_apk.outputs.apk_path }}"
           if ($apkPath -and (Test-Path $apkPath)) {
-            Copy-Item $apkPath "$distDir\TabletMonitor.apk"
+            Copy-Item $apkPath "$distDir\FlexDisplay.apk"
           }
 
           # Launchers
@@ -165,9 +165,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Tablet Monitor ${{ github.ref_name }}"
+          name: "FlexDisplay ${{ github.ref_name }}"
           body: |
-            ## Tablet Monitor ${{ github.ref_name }}
+            ## FlexDisplay ${{ github.ref_name }}
 
             ### Instalacion rapida
             1. Descarga `${{ steps.assemble.outputs.dist_name }}.zip`

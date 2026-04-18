@@ -42,9 +42,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD nc -zv localhost 9001 || exit 1
 
 # Environment variables
-ENV TABLET_MONITOR_LISTEN=0.0.0.0
-ENV TABLET_MONITOR_FPS=60
-ENV TABLET_MONITOR_BITRATE=3500
+ENV FLEXDISPLAY_LISTEN=0.0.0.0
+ENV FLEXDISPLAY_FPS=60
+ENV FLEXDISPLAY_BITRATE=3500
 
 # Run
 CMD ["/app/host-windows"]

@@ -1,4 +1,4 @@
-﻿package com.example.tabletmonitor
+﻿package com.flexdisplay.android
 
 import android.content.Context
 import android.content.res.Configuration

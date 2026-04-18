@@ -28,7 +28,7 @@ function Resolve-HostExePath {
 }
 
 # IMPORTANT: do not force localhost in Wi-Fi mode
-Remove-Item Env:TABLET_MONITOR_LISTEN -ErrorAction SilentlyContinue
+Remove-Item Env:FLEXDISPLAY_LISTEN -ErrorAction SilentlyContinue
 
 # Best effort: detect LAN IPv4 for user guidance
 $lanIp = Get-NetIPAddress -AddressFamily IPv4 |
@@ -67,7 +67,7 @@ foreach ($ownerPid in $portOwners) {
 }
 
 $root = Split-Path -Parent $PSScriptRoot
-$env:TABLET_MONITOR_FPS = '60'
+$env:FLEXDISPLAY_FPS = '60'
 
 # Register cleanup: runs when terminal window closes or PowerShell engine exits
 Register-EngineEvent PowerShell.Exiting -Action {

@@ -168,28 +168,28 @@
     {
       "step": 4,
       "name": "Launch Android App",
-      "command": "adb shell am start -n com.example.tabletmonitor/.MainActivity",
+      "command": "adb shell am start -n com.flexdisplay.android/.MainActivity",
       "prerequisites": ["APK installed"]
     }
   ],
   "environment_variables": {
     "optional": {
-      "TABLET_MONITOR_HW_ENCODER": {
+      "FLEXDISPLAY_HW_ENCODER": {
         "description": "GPU encoder preference",
         "default": "auto-detect",
         "values": ["h264_nvenc", "h264_qsv", "h264_amf", "libx264"]
       },
-      "TABLET_MONITOR_LISTEN": {
+      "FLEXDISPLAY_LISTEN": {
         "description": "Server listen address",
         "default": "0.0.0.0",
         "example": "127.0.0.1"
       },
-      "TABLET_MONITOR_FPS": {
+      "FLEXDISPLAY_FPS": {
         "description": "Target FPS",
         "default": "60",
         "range": "1-120"
       },
-      "TABLET_MONITOR_BITRATE": {
+      "FLEXDISPLAY_BITRATE": {
         "description": "H.264 bitrate in kbps",
         "default": "3500",
         "range": "500-10000"

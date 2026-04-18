@@ -79,7 +79,7 @@ function Parse-ConnectedDevices {
         }
     }
     # Force array return so a single device is not unwrapped to a scalar object.
-    return ,$devices
+    return , $devices
 }
 
 function Resolve-HostExePath {
@@ -158,8 +158,8 @@ Write-Host '[*] Resetting ADB server (clearing stale connections)...' -Foregroun
 Register-EngineEvent PowerShell.Exiting -MessageData $adbPath -Action {
     Stop-Process -Name 'host-windows' -Force -ErrorAction SilentlyContinue
     Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like '*--app=*9001*' } |
-        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Where-Object { $_.CommandLine -like '*--app=*9001*' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     if ($event.MessageData) { & $event.MessageData kill-server 2>$null }
 } | Out-Null
 
@@ -172,10 +172,12 @@ $selectedSerial = $null
 if ($devices.Count -eq 0) {
     Write-Host "[WARN] No USB devices found. Host will still start." -ForegroundColor Yellow
     Write-Host "       Connect a device and run START.bat again for auto-setup." -ForegroundColor Yellow
-} elseif ($devices.Count -eq 1) {
+}
+elseif ($devices.Count -eq 1) {
     $selectedSerial = $devices[0].Serial
     Write-Host "[OK] Found 1 device: $selectedSerial" -ForegroundColor Green
-} else {
+}
+else {
     Write-Host "[OK] Found $($devices.Count) devices:" -ForegroundColor Green
     for ($i = 0; $i -lt $devices.Count; $i++) {
         $d = $devices[$i]
@@ -193,7 +195,7 @@ if ($devices.Count -eq 0) {
 }
 
 if ($selectedSerial) {
-    $packageName = "com.example.tabletmonitor"
+    $packageName = "com.flexdisplay.android"
     $forceInstall = $ForceInstallApk -or ($env:FLEXDISPLAY_FORCE_APK_INSTALL -eq "1")
     $appInstalled = Test-AppInstalled -AdbPath $adbPath -Serial $selectedSerial -PackageName $packageName
 
@@ -202,21 +204,25 @@ if ($selectedSerial) {
         if ($appInstalled -and (-not $forceInstall)) {
             Write-Host "[OK] App already installed. Skipping APK install." -ForegroundColor Green
             Write-Host "     To force reinstall: run scripts\start-usb.ps1 -ForceInstallApk" -ForegroundColor Gray
-        } else {
+        }
+        else {
             Write-Host "[*] Installing app on device..." -ForegroundColor Cyan
             $installOutput = & $adbPath -s $selectedSerial install -r $apkPath 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "[OK] App installed/updated" -ForegroundColor Green
-            } else {
+            }
+            else {
                 Write-Host "[WARN] APK install failed. Continuing anyway." -ForegroundColor Yellow
                 $installOutput | ForEach-Object { Write-Host "       $_" -ForegroundColor DarkYellow }
             }
         }
-    } else {
+    }
+    else {
         if ($appInstalled) {
             Write-Host "[OK] App already installed on device." -ForegroundColor Green
             Write-Host "     APK file not found locally, skipping install." -ForegroundColor Gray
-        } else {
+        }
+        else {
             Write-Host "[WARN] APK not found." -ForegroundColor Yellow
             Write-Host "       Expected one of:" -ForegroundColor Yellow
             Write-Host "       - android-client\app\build\outputs\apk\debug\app-debug.apk" -ForegroundColor DarkYellow
@@ -231,12 +237,23 @@ if ($selectedSerial) {
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] Reverse tcp:9001 ready" -ForegroundColor Green
         Write-Host "     Device will use 127.0.0.1:9001" -ForegroundColor Gray
-    } else {
+    }
+    else {
         Write-Host "[WARN] Could not configure adb reverse automatically." -ForegroundColor Yellow
     }
 
     Write-Host "[*] Launching Android app..." -ForegroundColor Cyan
     & $adbPath -s $selectedSerial shell monkey -p $packageName -c android.intent.category.LAUNCHER 1 | Out-Null
+
+    # Start logcat capture in background — writes to logs\logcat-<serial>.txt
+    $logDir = Join-Path (Split-Path -Parent $PSScriptRoot) "logs"
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    $logcatFile = Join-Path $logDir "logcat-$selectedSerial.txt"
+    Write-Host "[*] Capturing Android logcat -> $logcatFile" -ForegroundColor Cyan
+    $logcatJob = Start-Job -ScriptBlock {
+        param($adb, $serial, $file)
+        & $adb -s $serial logcat -v time *:W FlexDisplay:V > $file 2>&1
+    } -ArgumentList $adbPath, $selectedSerial, $logcatFile
 }
 
 Write-Host ""
@@ -245,23 +262,25 @@ Write-Host "[*] Starting server..." -ForegroundColor Cyan
 Stop-Process -Name "host-windows" -Force -ErrorAction SilentlyContinue
 
 $portOwners = Get-NetTCPConnection -LocalPort 9001 -State Listen -ErrorAction SilentlyContinue |
-    Select-Object -ExpandProperty OwningProcess -Unique
+Select-Object -ExpandProperty OwningProcess -Unique
 foreach ($ownerPid in $portOwners) {
     if ($ownerPid -and $ownerPid -ne $PID) {
         Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
     }
 }
 
-$env:TABLET_MONITOR_LISTEN = '127.0.0.1'
-$env:TABLET_MONITOR_FPS = '60'
+$env:FLEXDISPLAY_LISTEN = '127.0.0.1'
+$env:FLEXDISPLAY_FPS = '60'
 
 function Invoke-Cleanup {
     param([string]$AdbExe)
     Stop-Process -Name 'host-windows' -Force -ErrorAction SilentlyContinue
     Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like '*--app=*9001*' } |
-        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Where-Object { $_.CommandLine -like '*--app=*9001*' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     if ($AdbExe -and (Test-Path $AdbExe)) { & $AdbExe kill-server 2>$null | Out-Null }
+    # Stop logcat background job if running
+    Get-Job | Where-Object { $_.State -eq 'Running' } | Stop-Job -PassThru | Remove-Job -Force -ErrorAction SilentlyContinue
     Write-Host '[OK] Cleanup done.' -ForegroundColor Green
 }
 
@@ -272,7 +291,8 @@ if ($hostExe) {
     try {
         & $hostExe
         $exitCode = $LASTEXITCODE
-    } finally {
+    }
+    finally {
         Invoke-Cleanup -AdbExe $adbPath
     }
     exit $exitCode
@@ -283,7 +303,8 @@ if (Test-Path (Join-Path $root "host-windows\Cargo.toml")) {
     try {
         cargo run --release
         $exitCode = $LASTEXITCODE
-    } finally {
+    }
+    finally {
         Invoke-Cleanup -AdbExe $adbPath
     }
     exit $exitCode

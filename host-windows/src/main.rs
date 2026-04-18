@@ -421,7 +421,7 @@ loadAll();
 }
 
 fn maybe_open_gui(listen_ip: std::net::Ipv4Addr) -> Option<std::sync::mpsc::Receiver<()>> {
-    if std::env::var("TABLET_MONITOR_DISABLE_AUTO_GUI")
+    if std::env::var("FLEXDISPLAY_DISABLE_AUTO_GUI")
         .ok()
         .as_deref()
         == Some("1")
@@ -639,9 +639,9 @@ async fn main() -> anyhow::Result<()> {
         );
 
     // Default to 0.0.0.0 so Wi-Fi connections work without setting the env var.
-    // USB-only mode: set TABLET_MONITOR_LISTEN=127.0.0.1 before starting.
+    // USB-only mode: set FLEXDISPLAY_LISTEN=127.0.0.1 before starting.
     let listen_host =
-        std::env::var("TABLET_MONITOR_LISTEN").unwrap_or_else(|_| "0.0.0.0".to_string());
+        std::env::var("FLEXDISPLAY_LISTEN").unwrap_or_else(|_| "0.0.0.0".to_string());
     let listen_ip: std::net::Ipv4Addr =
         listen_host.parse().unwrap_or(std::net::Ipv4Addr::LOCALHOST);
 
@@ -672,7 +672,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let gui_closed_rx = maybe_open_gui(listen_ip);
-    let exit_on_gui_close = std::env::var("TABLET_MONITOR_EXIT_ON_GUI_CLOSE")
+    let exit_on_gui_close = std::env::var("FLEXDISPLAY_EXIT_ON_GUI_CLOSE")
         .ok()
         .as_deref()
         == Some("1");
@@ -925,7 +925,7 @@ async fn handle_h264_stream(
             .preferred_encoder
             .clone()
             .or_else(|| query.encoder.clone())
-            .or_else(|| std::env::var("TABLET_MONITOR_HW_ENCODER").ok());
+            .or_else(|| std::env::var("FLEXDISPLAY_HW_ENCODER").ok());
         let manual_encoder_selected = preferred.is_some();
 
         let selected_amf_device = settings_snapshot.preferred_amf_device;
@@ -977,7 +977,7 @@ async fn handle_h264_stream(
         // Capture backend priority: mirror mode prefers GDIGRAB (coordinate-based capture)
         // over DDAGRAB (index-based capture) to avoid cropping issues on non-standard resolutions.
         // Extended mode can use DDAGRAB (DXGI) since it targets a virtual display.
-        let prefer_capture_env = std::env::var("TABLET_MONITOR_CAPTURE")
+        let prefer_capture_env = std::env::var("FLEXDISPLAY_CAPTURE")
             .ok()
             .map(|v| v.trim().to_ascii_lowercase());
         let capture_order: [Capture; 2] = if stream_mode.eq_ignore_ascii_case("mirror") {
@@ -1180,7 +1180,7 @@ async fn handle_h264_stream(
                     {
                         let _ = ws_tx
                             .send(Message::text(
-                                "{\"type\":\"error\",\"message\":\"FFmpeg not found. Install ffmpeg or set TABLET_MONITOR_FFMPEG\"}".to_string(),
+                                "{\"type\":\"error\",\"message\":\"FFmpeg not found. Install ffmpeg or set FLEXDISPLAY_FFMPEG\"}".to_string(),
                             ))
                             .await;
                         break;
@@ -1729,7 +1729,7 @@ fn ffmpeg_log_path(encoder: &str) -> std::path::PathBuf {
 /// 3. Fall back to the name `ffmpeg` and let the OS search PATH.
 fn ffmpeg_exe() -> std::path::PathBuf {
     // Explicit override for portable/custom deployments.
-    if let Ok(custom) = std::env::var("TABLET_MONITOR_FFMPEG") {
+    if let Ok(custom) = std::env::var("FLEXDISPLAY_FFMPEG") {
         let p = std::path::PathBuf::from(custom);
         if p.exists() {
             return p;
